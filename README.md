@@ -22,7 +22,7 @@ in body image research_, _Body Image_ 47, 262–278.**
 > **▶ Try it live (no install): https://cahitgs.github.io/esem-analyzer/**
 > &nbsp;·&nbsp; **Guided demo (worked example): https://cahitgs.github.io/esem-analyzer/demo.html**
 
-![Model builder — Λ target-pattern matrix, live syntax, conceptual diagram](docs/img/02-model-builder.png?v=7)
+![Model builder — Λ target-pattern matrix, live syntax, conceptual diagram](docs/img/02-model-builder.png?v=8)
 
 ---
 
@@ -69,7 +69,7 @@ Two identification forms are offered: **standard** (factor variances `@1` — fo
 predicting outcomes) and **higher-order** (the referent's main loading also fixed, variances `*1` — for
 factors that become endogenous, e.g. under a higher-order factor).
 
-![ESEM-within-CFA card](docs/img/05-esem-within-cfa.png?v=5)
+![ESEM-within-CFA card](docs/img/05-esem-within-cfa.png?v=8)
 
 **Verified against real Mplus 8.3:** the generated oblique ESEM-within-CFA reproduces the source ESEM
 *exactly* — identical number of free parameters, degrees of freedom, χ², and log-likelihood

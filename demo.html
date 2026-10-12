@@ -118,19 +118,19 @@
 
           <h3 class="step" id="model"><span class="num-badge" aria-hidden="true">2</span>Sketch the model</h3>
           <p class="body">On the Λ target-pattern matrix set three factors (i1–i5 → F1, i6–i10 → F2, i11–i15 → F3), pick a rotation (Geomin or Target), the estimator (MLR), and the models to generate. The manuscript on the right draws the hypothesized model as Figure 1 while you click; the syntax preview opens on the Mplus sheet.</p>
-          <figure class="shot"><img width="2400" height="1500" src="docs/img/02-model-builder.png?v=7" alt="The Model step: items, factors and the Λ target-pattern matrix on the left; the manuscript with the hypothesized model on the right" loading="lazy" /></figure>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/02-model-builder.png?v=8" alt="The Model step: items, factors and the Λ target-pattern matrix on the left; the manuscript with the hypothesized model on the right" loading="lazy" /></figure>
           <p class="tcap fig"><b></b></p><p class="tcap"><i>The Model step with the three-factor pattern preloaded.</i></p>
           <div class="row"><a class="btn btn-sm" href="index.html?demo=model">Open the Model step (3 factors preloaded)</a></div>
 
           <h3 class="step" id="syntax"><span class="num-badge" aria-hidden="true">3</span>Generate the syntax, run it</h3>
           <p class="body">The app writes exact Mplus <span class="mono">.inp</span> for every model: CFA, ESEM (Geomin and Target), bifactor-CFA, bifactor-ESEM and the six invariance steps, wrapped under the 90-character limit. Click a file to read it on the Mplus sheet. Started on your own computer (<span class="mono">node serve.mjs</span>, or the desktop <span class="mono">.exe</span> from the releases page), the step finds your Mplus, shows its version in the topbar, and <b>Run all in Mplus</b> runs the models one after another; each output joins the manuscript as it finishes. Online, download the files or use <b>Auto mode</b> (Chrome/Edge): a local folder with a <span class="mono">RUN-ALL.bat</span> that imports the results as Mplus writes them. The optional <b>Convergence aids</b> card adds Morin's remedies for stubborn models.</p>
-          <figure class="shot"><img width="2400" height="1500" src="docs/img/03-syntax.png?v=7" alt="The Syntax step: input files, the Run in Mplus card with per-model status, and convergence aids" loading="lazy" /></figure>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/03-syntax.png?v=8" alt="The Syntax step: input files, the Run in Mplus card with per-model status, and convergence aids" loading="lazy" /></figure>
           <p class="tcap fig"><b></b></p><p class="tcap"><i>The Syntax step on a computer with Mplus: two models run and written into the manuscript.</i></p>
           <div class="row"><a class="btn btn-sm" href="index.html?demo=syntax">Open the Syntax step</a></div>
 
           <h3 class="step" id="results"><span class="num-badge" aria-hidden="true">4</span>Read it as APA</h3>
           <p class="body">Each <span class="mono">.out</span> becomes a row of the fit table and a <b>Morin-style loadings table</b> (Hoyle Handbook, Table 2): items grouped into subscale blocks with a per-block ω row, target loadings bold, non-significant loadings italic, plus auto-written prose and an interactive path diagram. Several outputs share one fit-comparison table. <b>Copy for Word</b> and <b>.docx</b> export the very same tables in the same layout. For this demo the runs are already done: every output in <span class="mono">example-dataset/</span> is a real Mplus 8.3 result.</p>
-          <figure class="shot"><img width="2400" height="1500" src="docs/img/04-results.png?v=7" alt="The Results step: output files on the left, the goodness-of-fit table and standardized loadings in the manuscript" loading="lazy" /></figure>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/04-results.png?v=8" alt="The Results step: output files on the left, the goodness-of-fit table and standardized loadings in the manuscript" loading="lazy" /></figure>
           <p class="tcap fig"><b></b></p><p class="tcap"><i>Five measurement models compared in one fit table.</i></p>
           <div class="row">
             <a class="btn btn-sm btn-primary" href="index.html?demo=measurement">All five measurement models</a>
@@ -140,25 +140,25 @@
 
           <h3 class="step"><span class="num-badge" aria-hidden="true">5</span>Bifactor diagram</h3>
           <p class="body">The diagrams follow the article's figures and are interactive: toggle cross-loadings and uniquenesses, show or hide factors, drag the ellipses, export SVG or PNG. Colour carries meaning: amber ellipses are the specific factors, the navy ellipse is the general factor reaching every item.</p>
-          <figure class="shot"><img width="2400" height="1500" src="docs/img/06-bifactor-diagram.png?v=7" alt="Bifactor path diagram in the manuscript with its options card on the left" loading="lazy" /></figure>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/06-bifactor-diagram.png?v=8" alt="Bifactor path diagram in the manuscript with its options card on the left" loading="lazy" /></figure>
           <p class="tcap fig"><b></b></p><p class="tcap"><i>Bifactor-ESEM path diagram: three specific factors and the general factor.</i></p>
           <div class="row"><a class="btn btn-sm" href="index.html?demo=bifactor">Open the bifactor-ESEM result</a></div>
 
           <h3 class="step"><span class="num-badge" aria-hidden="true">6</span>Invariance across groups</h3>
           <p class="body">The six <span class="mono">inv_*.out</span> files (men vs women) collapse into one comparison table: configural → metric → scalar → strict → variance–covariance → latent means, with Satorra–Bentler scaled Δχ², ΔCFI, ΔRMSEA and a supported / not supported verdict (Chen, 2007).</p>
-          <figure class="shot"><img width="2400" height="1500" src="docs/img/07-invariance.png?v=7" alt="Measurement invariance comparison table in the manuscript" loading="lazy" /></figure>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/07-invariance.png?v=8" alt="Measurement invariance comparison table in the manuscript" loading="lazy" /></figure>
           <p class="tcap fig"><b></b></p><p class="tcap"><i>Tests of measurement invariance across two groups.</i></p>
           <div class="row"><a class="btn btn-sm" href="index.html?demo=invariance">Open the invariance sequence</a></div>
 
           <h3 class="step"><span class="num-badge" aria-hidden="true">7</span>Invariance across time</h3>
           <p class="body">The same six steps also run <b>longitudinally</b>: one single-group model per step, each wave as its own ESEM set, loadings equated across waves, every indicator's residual correlated with itself over time. Sequences are generated for CFA, ESEM and <b>bifactor-ESEM</b>. This demo drops twelve outputs from a 2-wave well-being example: invariance holds through variance–covariance, and the latent-means step flags the built-in growth, which the bifactor sequence places on the general factor only.</p>
-          <figure class="shot"><img width="2400" height="1500" src="docs/img/08-longitudinal.png?v=7" alt="Longitudinal invariance comparison tables for ESEM and bifactor-ESEM" loading="lazy" /></figure>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/08-longitudinal.png?v=8" alt="Longitudinal invariance comparison tables for ESEM and bifactor-ESEM" loading="lazy" /></figure>
           <p class="tcap fig"><b></b></p><p class="tcap"><i>Longitudinal invariance tables for the ESEM and bifactor-ESEM sequences.</i></p>
           <div class="row"><a class="btn btn-sm" href="index.html?demo=longitudinal">Open the longitudinal sequences</a></div>
 
           <h3 class="step"><span class="num-badge" aria-hidden="true">8</span>Convert to ESEM-within-CFA</h3>
           <p class="body">Because the ESEM output carries a SVALUES block, Results shows an <b>ESEM-within-CFA</b> card: it picks a referent indicator per factor, fixes that referent's cross-loadings to their ESEM values, and writes a runnable CFA you can embed in larger SEM, MIMIC or DIF models (Morin's referent method). Verified in Mplus to reproduce the source ESEM exactly (df 63, log-likelihood −11107.13 in both). On a computer with Mplus the card runs the new model from here too.</p>
-          <figure class="shot"><img width="2400" height="1500" src="docs/img/05-esem-within-cfa.png?v=7" alt="ESEM-within-CFA card with referent pickers and the generated syntax" loading="lazy" /></figure>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/05-esem-within-cfa.png?v=8" alt="ESEM-within-CFA card with referent pickers and the generated syntax" loading="lazy" /></figure>
           <p class="tcap fig"><b></b></p><p class="tcap"><i>The ESEM-within-CFA card: referents, generated syntax, identification check.</i></p>
           <div class="row"><a class="btn btn-sm" href="index.html?demo=ewc">Open the ESEM-within-CFA demo</a></div>
 
