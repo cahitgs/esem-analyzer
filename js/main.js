@@ -780,7 +780,7 @@ function renderPaper() {
   const date = new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
   const d = appState.data, spec = appState.spec;
   const title = d?.fileName ? d.fileName.replace(/\.[^.]+$/, '') : 'Untitled study';
-  secs.push({ id: 'head', filled: !!d, html: `<div class="ms-run"><span>ESEM Analyzer · Mplus workbench for ESEM</span><span>Draft · ${esc(date)}</span></div><h1 class="ms-title">${esc(title)}</h1><p class="ms-meta">Table format follows Swami, Maïano, &amp; Morin (2023), <i>A guide to ESEM and bifactor-ESEM</i>.</p>` });
+  secs.push({ id: 'head', filled: !!d, html: `<div class="ms-run"><span>ESEM Analyzer · Mplus workbench for ESEM</span><span>Draft · ${esc(date)}</span></div><h1 class="ms-title">${esc(title)}</h1>` });
 
   // Method — the hypothesized model, drawn from Λ as it is sketched
   let method = '<h2 class="rep-h">Method</h2>';

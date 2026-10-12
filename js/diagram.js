@@ -1,5 +1,5 @@
 // diagram.js — Mplus-style path diagram (SVG), faithful to the abbreviated factor-loading
-// diagrams in Swami, Maïano & Morin (2023), Body Image 47, Fig. 1.
+// diagrams Morin uses for ESEM and bifactor-ESEM models (Hoyle Handbook ch. 27).
 //
 // Two layouts, chosen automatically by model structure:
 //   • Standard (CFA / ESEM) — Fig. 1(a)/(b): factor ellipses on the LEFT, item rectangles on

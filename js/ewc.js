@@ -1,6 +1,6 @@
 // ewc.js — ESEM-within-CFA (and bifactor-EWC) generation. Pure (no DOM); Node-testable.
 //
-// Morin's workflow (Swami, Maïano & Morin 2023, Technical Supplement pp. T10–T13):
+// Morin's workflow (Hoyle Handbook ch. 27 technical supplement, T62–T67):
 //   1. Run the final ESEM / bifactor-ESEM with SVALUES in the OUTPUT.
 //   2. Mplus prints a "(CFA) MODEL COMMAND WITH FINAL ROTATED ESTIMATES USED AS
 //      STARTING VALUES" block — every loading / correlation / intercept / uniqueness

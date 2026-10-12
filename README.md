@@ -16,13 +16,10 @@ results as it finishes — nothing to download or upload. The online page can us
 `ESEM-Analyzer.exe` (or `node serve.mjs`) and press **Connect** in the guide or on the Mplus pill; the page
 links to it on localhost and remembers the choice. A first-visit **Guide** explains the four steps and both ways.
 
-The syntax and APA table format follow **Swami, Maïano & Morin (2023), _A guide to ESEM and bifactor-ESEM
-in body image research_, _Body Image_ 47, 262–278.**
-
 > **▶ Try it live (no install): https://cahitgs.github.io/esem-analyzer/**
 > &nbsp;·&nbsp; **Guided demo (worked example): https://cahitgs.github.io/esem-analyzer/demo.html**
 
-![Model builder — Λ target-pattern matrix, live syntax, conceptual diagram](docs/img/02-model-builder.png?v=8)
+![Model builder — Λ target-pattern matrix, live syntax, conceptual diagram](docs/img/02-model-builder.png?v=9)
 
 ---
 
@@ -51,7 +48,7 @@ Standardized-loadings tables follow Morin's Table-2 layout — items grouped int
 
 ### Path diagrams
 
-Faithful to the figures in Swami/Maïano/Morin (2023): factors, items, correlations, uniquenesses, and a
+Factors, items, correlations, uniquenesses, and a
 proper bifactor layout (specific factors one side, the global factor reaching every item the other side).
 Diagrams are interactive — toggle cross-loadings / uniquenesses, show/hide factors, **drag the ellipses**
 to reposition for reporting, and export SVG / PNG.
@@ -69,7 +66,7 @@ Two identification forms are offered: **standard** (factor variances `@1` — fo
 predicting outcomes) and **higher-order** (the referent's main loading also fixed, variances `*1` — for
 factors that become endogenous, e.g. under a higher-order factor).
 
-![ESEM-within-CFA card](docs/img/05-esem-within-cfa.png?v=8)
+![ESEM-within-CFA card](docs/img/05-esem-within-cfa.png?v=9)
 
 **Verified against real Mplus 8.3:** the generated oblique ESEM-within-CFA reproduces the source ESEM
 *exactly* — identical number of free parameters, degrees of freedom, χ², and log-likelihood
@@ -168,8 +165,8 @@ See the full walkthrough in **[`GUIDE.md`](GUIDE.md)**.
 
 ## Notes & disclaimer
 
-- This is an independent helper. It is **not affiliated with or endorsed by** Muthén & Muthén (Mplus) or
-  the authors of Swami, Maïano & Morin (2023). You need your own licensed copy of Mplus to run the syntax.
+- This is an independent helper. It is **not affiliated with or endorsed by** Muthén & Muthén (Mplus).
+  You need your own licensed copy of Mplus to run the syntax.
 - Your data and output files never leave the browser; the app makes no network requests with them.
 - The public site uses [GoatCounter](https://www.goatcounter.com) for anonymous, cookie-free visit
   counts (page, referrer, country) — it never sees your data or output files.

@@ -43,7 +43,7 @@ them; lines are wrapped to stay under Mplus's 90-character limit.
 
 ![Generated syntax](docs/img/03-syntax.png?v=6)
 
-A few load-bearing conventions, matched to Swami/Maïano/Morin (2023):
+A few load-bearing conventions:
 
 - **CFA** uses standardized-factor identification: `F1 BY x1* x2 x3; F1@1;`
 - **ESEM (Geomin):** `ROTATION = GEOMIN(OBLIQUE, .5);` and `F1-Fk BY <items> (*1);`
@@ -139,10 +139,4 @@ and the factor correlation at its ESEM value (.439).
 
 ---
 
-## Reference
-
-Swami, V., Maïano, C., & Morin, A. J. S. (2023). A guide to exploratory structural equation modeling (ESEM)
-and bifactor-ESEM in body image research. *Body Image, 47,* 262–278.
-
-*Independent tool; not affiliated with or endorsed by Muthén & Muthén or the article authors. The article
-and its supplement are not redistributed here.*
+*Independent tool; not affiliated with or endorsed by Muthén & Muthén.*

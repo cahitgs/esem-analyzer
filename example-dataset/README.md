@@ -1,7 +1,7 @@
 # Example dataset — `data.dat`
 
-A **fully synthetic** dataset that mirrors the 3-factor / bifactor structure of the ACSS example in
-Swami, Maïano & Morin (2023). No real participants, and the article's own data is not redistributed.
+A **fully synthetic** dataset with a 3-factor / bifactor structure (15 items: three 5-item subscales plus a
+general factor). No real participants.
 
 - **600 rows × 16 columns**, space-delimited, no header, dot decimals (Mplus free format).
 - Columns `i1 … i15` = 15 items; `gender` = a 2-level grouping variable (`1` men / `2` women).
