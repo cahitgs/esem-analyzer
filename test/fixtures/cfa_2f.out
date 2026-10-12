@@ -1,0 +1,886 @@
+Mplus VERSION 8.3
+MUTHEN & MUTHEN
+06/22/2026   1:19 AM
+
+INPUT INSTRUCTIONS
+
+  TITLE:
+  CFA - 2 factors
+  DATA:
+  FILE =
+  "C:/Users/tekno/Desktop/kitaplar/ESEM/supplementary_materials_esem/Data/ESEM.dat";
+  VARIABLE:
+  NAMES ARE X1 X2 X3 X4 X5 X6 Y1 Y2 Y3 Y4 Y5 Y6 GV;
+  USEVARIABLES ARE X1 X2 X3 X4 X5 X6;
+  ANALYSIS:
+  ESTIMATOR IS MLR;
+  MODEL:
+  F1 BY X1 X2 X3;
+  F2 BY X4 X5 X6;
+  OUTPUT:
+  SAMPSTAT STANDARDIZED RESIDUAL CINTERVAL MODINDICES (3.0) TECH2 TECH4;
+
+
+
+INPUT READING TERMINATED NORMALLY
+
+
+
+
+CFA - 2 factors
+
+SUMMARY OF ANALYSIS
+
+Number of groups                                                 1
+Number of observations                                        4500
+
+Number of dependent variables                                    6
+Number of independent variables                                  0
+Number of continuous latent variables                            2
+
+Observed dependent variables
+
+  Continuous
+   X1          X2          X3          X4          X5          X6
+
+Continuous latent variables
+   F1          F2
+
+
+Estimator                                                      MLR
+Information matrix                                        OBSERVED
+Maximum number of iterations                                  1000
+Convergence criterion                                    0.500D-04
+Maximum number of steepest descent iterations                   20
+
+Input data file(s)
+  C:/Users/tekno/Desktop/kitaplar/ESEM/supplementary_materials_esem/Data/ESEM.da
+
+Input data format  FREE
+
+
+SAMPLE STATISTICS
+
+
+     SAMPLE STATISTICS
+
+
+           Means
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+                0.656         0.450         0.457         0.710         0.432
+
+
+           Means
+              X6
+              ________
+                0.574
+
+
+           Covariances
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+ X1             1.172
+ X2             0.648         0.878
+ X3             0.633         0.603         1.167
+ X4             0.452         0.566         0.646         1.333
+ X5             0.337         0.394         0.452         0.635         0.745
+ X6             0.135         0.212         0.261         0.434         0.298
+
+
+           Covariances
+              X6
+              ________
+ X6             0.720
+
+
+           Correlations
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+ X1             1.000
+ X2             0.639         1.000
+ X3             0.541         0.596         1.000
+ X4             0.362         0.523         0.518         1.000
+ X5             0.361         0.487         0.485         0.637         1.000
+ X6             0.147         0.267         0.285         0.443         0.406
+
+
+           Correlations
+              X6
+              ________
+ X6             1.000
+
+
+UNIVARIATE SAMPLE STATISTICS
+
+
+     UNIVARIATE HIGHER-ORDER MOMENT DESCRIPTIVE STATISTICS
+
+         Variable/         Mean/     Skewness/   Minimum/ % with                Percentiles
+        Sample Size      Variance    Kurtosis    Maximum  Min/Max      20%/60%    40%/80%    Median
+
+     X1                    0.656       0.008      -2.891    0.02%      -0.268      0.374      0.652
+            4500.000       1.172      -0.136       4.574    0.02%       0.934      1.576
+     X2                    0.450      -0.040      -2.872    0.02%      -0.356      0.220      0.465
+            4500.000       0.878      -0.135       3.576    0.02%       0.704      1.230
+     X3                    0.457       0.022      -2.998    0.02%      -0.465      0.180      0.456
+            4500.000       1.167      -0.158       4.214    0.02%       0.749      1.361
+     X4                    0.710       0.008      -2.856    0.02%      -0.273      0.432      0.712
+            4500.000       1.333      -0.095       5.091    0.02%       1.002      1.694
+     X5                    0.432       0.036      -2.731    0.02%      -0.301      0.211      0.421
+            4500.000       0.745       0.086       3.887    0.02%       0.642      1.167
+     X6                    0.574       0.000      -2.640    0.02%      -0.131      0.358      0.566
+            4500.000       0.720       0.055       3.990    0.02%       0.781      1.280
+
+
+THE MODEL ESTIMATION TERMINATED NORMALLY
+
+
+
+MODEL FIT INFORMATION
+
+Number of Free Parameters                       19
+
+Loglikelihood
+
+          H0 Value                      -32949.165
+          H0 Scaling Correction Factor      1.0003
+            for MLR
+          H1 Value                      -32779.634
+          H1 Scaling Correction Factor      0.9969
+            for MLR
+
+Information Criteria
+
+          Akaike (AIC)                   65936.329
+          Bayesian (BIC)                 66058.154
+          Sample-Size Adjusted BIC       65997.780
+            (n* = (n + 2) / 24)
+
+Chi-Square Test of Model Fit
+
+          Value                            342.958*
+          Degrees of Freedom                     8
+          P-Value                           0.0000
+          Scaling Correction Factor         0.9886
+            for MLR
+
+*   The chi-square value for MLM, MLMV, MLR, ULSMV, WLSM and WLSMV cannot be used
+    for chi-square difference testing in the regular way.  MLM, MLR and WLSM
+    chi-square difference testing is described on the Mplus website.  MLMV, WLSMV,
+    and ULSMV difference testing is done using the DIFFTEST option.
+
+RMSEA (Root Mean Square Error Of Approximation)
+
+          Estimate                           0.096
+          90 Percent C.I.                    0.088  0.105
+          Probability RMSEA <= .05           0.000
+
+CFI/TLI
+
+          CFI                                0.967
+          TLI                                0.939
+
+Chi-Square Test of Model Fit for the Baseline Model
+
+          Value                          10308.005
+          Degrees of Freedom                    15
+          P-Value                           0.0000
+
+SRMR (Standardized Root Mean Square Residual)
+
+          Value                              0.037
+
+
+
+MODEL RESULTS
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+ F1       BY
+    X1                 1.000      0.000    999.000    999.000
+    X2                 1.011      0.020     51.725      0.000
+    X3                 1.025      0.024     42.823      0.000
+
+ F2       BY
+    X4                 1.000      0.000    999.000    999.000
+    X5                 0.693      0.016     43.165      0.000
+    X6                 0.449      0.014     32.540      0.000
+
+ F2       WITH
+    F1                 0.549      0.017     32.586      0.000
+
+ Intercepts
+    X1                 0.656      0.016     40.659      0.000
+    X2                 0.450      0.014     32.203      0.000
+    X3                 0.457      0.016     28.355      0.000
+    X4                 0.710      0.017     41.269      0.000
+    X5                 0.432      0.013     33.562      0.000
+    X6                 0.574      0.013     45.386      0.000
+
+ Variances
+    F1                 0.611      0.023     26.261      0.000
+    F2                 0.929      0.031     29.950      0.000
+
+ Residual Variances
+    X1                 0.561      0.015     38.069      0.000
+    X2                 0.254      0.011     23.532      0.000
+    X3                 0.525      0.016     33.236      0.000
+    X4                 0.404      0.018     22.603      0.000
+    X5                 0.299      0.010     29.140      0.000
+    X6                 0.532      0.012     43.321      0.000
+
+
+STANDARDIZED MODEL RESULTS
+
+
+STDYX Standardization
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+ F1       BY
+    X1                 0.722      0.009     80.542      0.000
+    X2                 0.843      0.008    111.063      0.000
+    X3                 0.742      0.009     78.330      0.000
+
+ F2       BY
+    X4                 0.835      0.008     98.569      0.000
+    X5                 0.774      0.009     83.525      0.000
+    X6                 0.510      0.012     41.103      0.000
+
+ F2       WITH
+    F1                 0.728      0.011     63.995      0.000
+
+ Intercepts
+    X1                 0.606      0.016     37.650      0.000
+    X2                 0.480      0.016     30.342      0.000
+    X3                 0.423      0.015     27.372      0.000
+    X4                 0.615      0.016     38.070      0.000
+    X5                 0.500      0.016     31.822      0.000
+    X6                 0.677      0.017     40.839      0.000
+
+ Variances
+    F1                 1.000      0.000    999.000    999.000
+    F2                 1.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1                 0.478      0.013     36.946      0.000
+    X2                 0.289      0.013     22.560      0.000
+    X3                 0.450      0.014     31.983      0.000
+    X4                 0.303      0.014     21.429      0.000
+    X5                 0.401      0.014     28.005      0.000
+    X6                 0.739      0.013     58.315      0.000
+
+
+STDY Standardization
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+ F1       BY
+    X1                 0.722      0.009     80.542      0.000
+    X2                 0.843      0.008    111.063      0.000
+    X3                 0.742      0.009     78.330      0.000
+
+ F2       BY
+    X4                 0.835      0.008     98.569      0.000
+    X5                 0.774      0.009     83.525      0.000
+    X6                 0.510      0.012     41.103      0.000
+
+ F2       WITH
+    F1                 0.728      0.011     63.995      0.000
+
+ Intercepts
+    X1                 0.606      0.016     37.650      0.000
+    X2                 0.480      0.016     30.342      0.000
+    X3                 0.423      0.015     27.372      0.000
+    X4                 0.615      0.016     38.070      0.000
+    X5                 0.500      0.016     31.822      0.000
+    X6                 0.677      0.017     40.839      0.000
+
+ Variances
+    F1                 1.000      0.000    999.000    999.000
+    F2                 1.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1                 0.478      0.013     36.946      0.000
+    X2                 0.289      0.013     22.560      0.000
+    X3                 0.450      0.014     31.983      0.000
+    X4                 0.303      0.014     21.429      0.000
+    X5                 0.401      0.014     28.005      0.000
+    X6                 0.739      0.013     58.315      0.000
+
+
+STD Standardization
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+ F1       BY
+    X1                 0.782      0.015     52.521      0.000
+    X2                 0.790      0.012     64.156      0.000
+    X3                 0.801      0.015     52.439      0.000
+
+ F2       BY
+    X4                 0.964      0.016     59.900      0.000
+    X5                 0.668      0.013     53.203      0.000
+    X6                 0.433      0.013     34.087      0.000
+
+ F2       WITH
+    F1                 0.728      0.011     63.995      0.000
+
+ Intercepts
+    X1                 0.656      0.016     40.659      0.000
+    X2                 0.450      0.014     32.203      0.000
+    X3                 0.457      0.016     28.355      0.000
+    X4                 0.710      0.017     41.269      0.000
+    X5                 0.432      0.013     33.562      0.000
+    X6                 0.574      0.013     45.386      0.000
+
+ Variances
+    F1                 1.000      0.000    999.000    999.000
+    F2                 1.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1                 0.561      0.015     38.069      0.000
+    X2                 0.254      0.011     23.532      0.000
+    X3                 0.525      0.016     33.236      0.000
+    X4                 0.404      0.018     22.603      0.000
+    X5                 0.299      0.010     29.140      0.000
+    X6                 0.532      0.012     43.321      0.000
+
+
+R-SQUARE
+
+    Observed                                        Two-Tailed
+    Variable        Estimate       S.E.  Est./S.E.    P-Value
+
+    X1                 0.522      0.013     40.271      0.000
+    X2                 0.711      0.013     55.532      0.000
+    X3                 0.550      0.014     39.165      0.000
+    X4                 0.697      0.014     49.285      0.000
+    X5                 0.599      0.014     41.763      0.000
+    X6                 0.261      0.013     20.551      0.000
+
+
+QUALITY OF NUMERICAL RESULTS
+
+     Condition Number for the Information Matrix              0.245E-01
+       (ratio of smallest to largest eigenvalue)
+
+
+CONFIDENCE INTERVALS OF MODEL RESULTS
+
+                  Lower .5%  Lower 2.5%    Lower 5%    Estimate    Upper 5%  Upper 2.5%   Upper .5%
+
+ F1       BY
+    X1               1.000       1.000       1.000       1.000       1.000       1.000       1.000
+    X2               0.960       0.972       0.979       1.011       1.043       1.049       1.061
+    X3               0.963       0.978       0.986       1.025       1.064       1.072       1.087
+
+ F2       BY
+    X4               1.000       1.000       1.000       1.000       1.000       1.000       1.000
+    X5               0.652       0.661       0.666       0.693       0.719       0.724       0.734
+    X6               0.414       0.422       0.427       0.449       0.472       0.476       0.485
+
+ F2       WITH
+    F1               0.506       0.516       0.521       0.549       0.577       0.582       0.592
+
+ Intercepts
+    X1               0.615       0.625       0.630       0.656       0.683       0.688       0.698
+    X2               0.414       0.423       0.427       0.450       0.473       0.477       0.486
+    X3               0.415       0.425       0.430       0.457       0.483       0.488       0.498
+    X4               0.666       0.677       0.682       0.710       0.739       0.744       0.755
+    X5               0.399       0.407       0.411       0.432       0.453       0.457       0.465
+    X6               0.541       0.549       0.553       0.574       0.595       0.599       0.607
+
+ Variances
+    F1               0.551       0.566       0.573       0.611       0.650       0.657       0.671
+    F2               0.849       0.868       0.878       0.929       0.980       0.990       1.009
+
+ Residual Variances
+    X1               0.523       0.532       0.537       0.561       0.585       0.590       0.599
+    X2               0.226       0.233       0.236       0.254       0.271       0.275       0.282
+    X3               0.484       0.494       0.499       0.525       0.551       0.556       0.565
+    X4               0.358       0.369       0.375       0.404       0.433       0.439       0.450
+    X5               0.273       0.279       0.282       0.299       0.316       0.319       0.326
+    X6               0.500       0.508       0.512       0.532       0.552       0.556       0.564
+
+
+CONFIDENCE INTERVALS OF STANDARDIZED MODEL RESULTS
+
+
+STDYX Standardization
+
+                  Lower .5%  Lower 2.5%    Lower 5%    Estimate    Upper 5%  Upper 2.5%   Upper .5%
+
+ F1       BY
+    X1               0.699       0.705       0.707       0.722       0.737       0.740       0.745
+    X2               0.824       0.828       0.831       0.843       0.856       0.858       0.863
+    X3               0.718       0.723       0.726       0.742       0.758       0.761       0.766
+
+ F2       BY
+    X4               0.813       0.818       0.821       0.835       0.849       0.851       0.857
+    X5               0.750       0.756       0.758       0.774       0.789       0.792       0.798
+    X6               0.478       0.486       0.490       0.510       0.531       0.535       0.542
+
+ F2       WITH
+    F1               0.699       0.706       0.710       0.728       0.747       0.751       0.758
+
+ Intercepts
+    X1               0.565       0.575       0.580       0.606       0.633       0.638       0.648
+    X2               0.439       0.449       0.454       0.480       0.506       0.511       0.521
+    X3               0.383       0.392       0.397       0.423       0.448       0.453       0.462
+    X4               0.574       0.584       0.589       0.615       0.642       0.647       0.657
+    X5               0.460       0.469       0.474       0.500       0.526       0.531       0.541
+    X6               0.634       0.644       0.649       0.677       0.704       0.709       0.719
+
+ Variances
+    F1               1.000       1.000       1.000       1.000       1.000       1.000       1.000
+    F2               1.000       1.000       1.000       1.000       1.000       1.000       1.000
+
+ Residual Variances
+    X1               0.445       0.453       0.457       0.478       0.500       0.504       0.512
+    X2               0.256       0.264       0.268       0.289       0.310       0.314       0.322
+    X3               0.413       0.422       0.426       0.450       0.473       0.477       0.486
+    X4               0.267       0.275       0.280       0.303       0.326       0.331       0.339
+    X5               0.364       0.373       0.378       0.401       0.425       0.429       0.438
+    X6               0.707       0.715       0.719       0.739       0.760       0.764       0.772
+
+
+STDY Standardization
+
+                  Lower .5%  Lower 2.5%    Lower 5%    Estimate    Upper 5%  Upper 2.5%   Upper .5%
+
+ F1       BY
+    X1               0.699       0.705       0.707       0.722       0.737       0.740       0.745
+    X2               0.824       0.828       0.831       0.843       0.856       0.858       0.863
+    X3               0.718       0.723       0.726       0.742       0.758       0.761       0.766
+
+ F2       BY
+    X4               0.813       0.818       0.821       0.835       0.849       0.851       0.857
+    X5               0.750       0.756       0.758       0.774       0.789       0.792       0.798
+    X6               0.478       0.486       0.490       0.510       0.531       0.535       0.542
+
+ F2       WITH
+    F1               0.699       0.706       0.710       0.728       0.747       0.751       0.758
+
+ Intercepts
+    X1               0.565       0.575       0.580       0.606       0.633       0.638       0.648
+    X2               0.439       0.449       0.454       0.480       0.506       0.511       0.521
+    X3               0.383       0.392       0.397       0.423       0.448       0.453       0.462
+    X4               0.574       0.584       0.589       0.615       0.642       0.647       0.657
+    X5               0.460       0.469       0.474       0.500       0.526       0.531       0.541
+    X6               0.634       0.644       0.649       0.677       0.704       0.709       0.719
+
+ Variances
+    F1               1.000       1.000       1.000       1.000       1.000       1.000       1.000
+    F2               1.000       1.000       1.000       1.000       1.000       1.000       1.000
+
+ Residual Variances
+    X1               0.445       0.453       0.457       0.478       0.500       0.504       0.512
+    X2               0.256       0.264       0.268       0.289       0.310       0.314       0.322
+    X3               0.413       0.422       0.426       0.450       0.473       0.477       0.486
+    X4               0.267       0.275       0.280       0.303       0.326       0.331       0.339
+    X5               0.364       0.373       0.378       0.401       0.425       0.429       0.438
+    X6               0.707       0.715       0.719       0.739       0.760       0.764       0.772
+
+
+STD Standardization
+
+                  Lower .5%  Lower 2.5%    Lower 5%    Estimate    Upper 5%  Upper 2.5%   Upper .5%
+
+ F1       BY
+    X1               0.744       0.753       0.757       0.782       0.806       0.811       0.820
+    X2               0.759       0.766       0.770       0.790       0.811       0.814       0.822
+    X3               0.762       0.772       0.776       0.801       0.827       0.831       0.841
+
+ F2       BY
+    X4               0.923       0.932       0.938       0.964       0.990       0.996       1.005
+    X5               0.636       0.643       0.647       0.668       0.689       0.693       0.700
+    X6               0.400       0.408       0.412       0.433       0.454       0.458       0.466
+
+ F2       WITH
+    F1               0.699       0.706       0.710       0.728       0.747       0.751       0.758
+
+ Intercepts
+    X1               0.615       0.625       0.630       0.656       0.683       0.688       0.698
+    X2               0.414       0.423       0.427       0.450       0.473       0.477       0.486
+    X3               0.415       0.425       0.430       0.457       0.483       0.488       0.498
+    X4               0.666       0.677       0.682       0.710       0.739       0.744       0.755
+    X5               0.399       0.407       0.411       0.432       0.453       0.457       0.465
+    X6               0.541       0.549       0.553       0.574       0.595       0.599       0.607
+
+ Variances
+    F1               1.000       1.000       1.000       1.000       1.000       1.000       1.000
+    F2               1.000       1.000       1.000       1.000       1.000       1.000       1.000
+
+ Residual Variances
+    X1               0.523       0.532       0.537       0.561       0.585       0.590       0.599
+    X2               0.226       0.233       0.236       0.254       0.271       0.275       0.282
+    X3               0.484       0.494       0.499       0.525       0.551       0.556       0.565
+    X4               0.358       0.369       0.375       0.404       0.433       0.439       0.450
+    X5               0.273       0.279       0.282       0.299       0.316       0.319       0.326
+    X6               0.500       0.508       0.512       0.532       0.552       0.556       0.564
+
+
+RESIDUAL OUTPUT
+
+
+     ESTIMATED MODEL AND RESIDUALS (OBSERVED - ESTIMATED)
+
+
+           Model Estimated Means
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+                0.656         0.450         0.457         0.710         0.432
+
+
+           Model Estimated Means
+              X6
+              ________
+                0.574
+
+
+           Residuals for Means
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+                0.000         0.000         0.000         0.000         0.000
+
+
+           Residuals for Means
+              X6
+              ________
+                0.000
+
+
+           Standardized Residuals (z-scores) for Means
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+                0.000         0.000         0.000         0.000         0.000
+
+
+           Standardized Residuals (z-scores) for Means
+              X6
+              ________
+                0.000
+
+
+           Normalized Residuals for Means
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+                0.000         0.000         0.000         0.000         0.000
+
+
+           Normalized Residuals for Means
+              X6
+              ________
+                0.000
+
+
+           Model Estimated Covariances
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+ X1             1.172
+ X2             0.618         0.878
+ X3             0.627         0.633         1.167
+ X4             0.549         0.555         0.563         1.333
+ X5             0.380         0.385         0.390         0.644         0.745
+ X6             0.247         0.249         0.253         0.417         0.289
+
+
+           Model Estimated Covariances
+              X6
+              ________
+ X6             0.720
+
+
+           Model Estimated Correlations
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+ X1             1.000
+ X2             0.609         1.000
+ X3             0.536         0.626         1.000
+ X4             0.439         0.513         0.451         1.000
+ X5             0.407         0.475         0.418         0.646         1.000
+ X6             0.269         0.314         0.276         0.426         0.395
+
+
+           Model Estimated Correlations
+              X6
+              ________
+ X6             1.000
+
+
+           Residuals for Covariances
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+ X1             0.000
+ X2             0.030         0.000
+ X3             0.006        -0.030         0.000
+ X4            -0.097         0.011         0.083         0.000
+ X5            -0.043         0.009         0.062        -0.009         0.000
+ X6            -0.112        -0.037         0.008         0.017         0.008
+
+
+           Residuals for Covariances
+              X6
+              ________
+ X6             0.000
+
+
+           Residuals for Correlations
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+ X1             0.000
+ X2             0.030         0.000
+ X3             0.005        -0.030         0.000
+ X4            -0.077         0.011         0.067         0.000
+ X5            -0.046         0.012         0.066        -0.009         0.000
+ X6            -0.121        -0.047         0.009         0.017         0.011
+
+
+           Residuals for Correlations
+              X6
+              ________
+ X6             0.000
+
+
+           Standardized Residuals (z-scores) for Covariances
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+ X1             0.000
+ X2           999.000         0.000
+ X3             1.354        -8.108       999.000
+ X4            -9.757         3.105       999.000         0.092
+ X5            -6.324         2.710        30.788        -3.175         0.000
+ X6           -10.531        -4.811         0.955         6.861         2.054
+
+
+           Standardized Residuals (z-scores) for Covariances
+              X6
+              ________
+ X6             0.127
+
+
+           Normalized Residuals for Covariances
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+ X1             0.000
+ X2             1.744         0.000
+ X3             0.330        -1.798        -0.001
+ X4            -4.943         0.646         4.121         0.001
+ X5            -2.999         0.711         4.149        -0.505         0.000
+ X6            -7.951        -3.033         0.608         1.075         0.716
+
+
+           Normalized Residuals for Covariances
+              X6
+              ________
+ X6             0.001
+
+
+MODEL MODIFICATION INDICES
+
+NOTE:  Modification indices for direct effects of observed dependent variables
+regressed on covariates may not be included.  To include these, request
+MODINDICES (ALL).
+
+Minimum M.I. value for printing the modification index     3.000
+
+                                   M.I.     E.P.C.  Std E.P.C.  StdYX E.P.C.
+
+BY Statements
+
+F1       BY X4                     4.012     0.111      0.087        0.075
+F1       BY X5                    16.995     0.154      0.120        0.139
+F1       BY X6                    51.579    -0.206     -0.161       -0.190
+F2       BY X1                   212.006    -0.407     -0.393       -0.363
+F2       BY X3                   167.592     0.365      0.352        0.326
+
+WITH Statements
+
+X2       WITH X1                 167.757     0.175      0.175        0.464
+X3       WITH X2                 212.070    -0.205     -0.205       -0.562
+X4       WITH X1                  55.926    -0.078     -0.078       -0.164
+X4       WITH X2                   4.473     0.019      0.019        0.058
+X4       WITH X3                  36.469     0.062      0.062        0.135
+X5       WITH X3                  16.697     0.032      0.032        0.081
+X5       WITH X4                  51.497    -0.154     -0.154       -0.443
+X6       WITH X1                  56.361    -0.069     -0.069       -0.127
+X6       WITH X2                   4.796    -0.016     -0.016       -0.043
+X6       WITH X3                   4.716     0.020      0.020        0.037
+X6       WITH X4                  17.019     0.048      0.048        0.104
+X6       WITH X5                   3.982     0.017      0.017        0.042
+
+
+TECHNICAL 2 OUTPUT
+
+
+     DERIVATIVES
+
+
+           Derivatives With Respect to NU
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+                0.000         0.000         0.000         0.000         0.000
+
+
+           Derivatives With Respect to NU
+              X6
+              ________
+                0.000
+
+
+           Derivatives With Respect to LAMBDA
+              F1            F2
+              ________      ________
+ X1             0.000         0.114
+ X2             0.000        -0.011
+ X3             0.000        -0.101
+ X4            -0.008         0.000
+ X5            -0.024         0.000
+ X6             0.055         0.000
+
+
+           Derivatives With Respect to THETA
+              X1            X2            X3            X4            X5
+              ________      ________      ________      ________      ________
+ X1             0.000
+ X2            -0.211         0.000
+ X3            -0.022         0.227         0.000
+ X4             0.157        -0.053        -0.129         0.000
+ X5             0.035        -0.003        -0.114         0.074         0.000
+ X6             0.179         0.066        -0.053        -0.077        -0.052
+
+
+           Derivatives With Respect to THETA
+              X6
+              ________
+ X6             0.000
+
+
+           Derivatives With Respect to ALPHA
+              F1            F2
+              ________      ________
+                0.000         0.000
+
+
+           Derivatives With Respect to BETA
+              F1            F2
+              ________      ________
+ F1             0.000         0.000
+ F2             0.000         0.000
+
+
+           Derivatives With Respect to PSI
+              F1            F2
+              ________      ________
+ F1             0.000
+ F2             0.000         0.000
+
+
+TECHNICAL 4 OUTPUT
+
+
+     ESTIMATES DERIVED FROM THE MODEL
+
+
+           ESTIMATED MEANS FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+                0.000         0.000
+
+
+           S.E. FOR ESTIMATED MEANS FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+                0.000         0.000
+
+
+           EST./S.E. FOR ESTIMATED MEANS FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+                0.000         0.000
+
+
+           TWO-TAILED P-VALUE FOR ESTIMATED MEANS FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+                1.000         1.000
+
+
+           ESTIMATED COVARIANCE MATRIX FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+ F1             0.611
+ F2             0.549         0.929
+
+
+           S.E. FOR ESTIMATED COVARIANCE MATRIX FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+ F1             0.023
+ F2             0.017         0.031
+
+
+           EST./S.E. FOR ESTIMATED COVARIANCE MATRIX FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+ F1            26.261
+ F2            32.586        29.950
+
+
+           TWO-TAILED P-VALUE FOR ESTIMATED COVARIANCE MATRIX FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+ F1             0.000
+ F2             0.000         0.000
+
+
+           ESTIMATED CORRELATION MATRIX FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+ F1             1.000
+ F2             0.728         1.000
+
+
+           S.E. FOR ESTIMATED CORRELATION MATRIX FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+ F1             0.000
+ F2             0.011         0.000
+
+
+           EST./S.E. FOR ESTIMATED CORRELATION MATRIX FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+ F1           999.000
+ F2            63.995       999.000
+
+
+           TWO-TAILED P-VALUE FOR ESTIMATED CORRELATION MATRIX FOR THE LATENT VARIABLES
+              F1            F2
+              ________      ________
+ F1             0.000
+ F2             0.000         0.000
+
+
+     Beginning Time:  01:19:19
+        Ending Time:  01:19:19
+       Elapsed Time:  00:00:00
+
+
+
+MUTHEN & MUTHEN
+3463 Stoner Ave.
+Los Angeles, CA  90066
+
+Tel: (310) 391-9971
+Fax: (310) 391-8971
+Web: www.StatModel.com
+Support: Support@StatModel.com
+
+Copyright (c) 1998-2019 Muthen & Muthen

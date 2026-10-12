@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ESEM Analyzer — Mplus workbench for ESEM</title>
+<meta name="description" content="Build Mplus ESEM syntax from a model you sketch, run it locally, then turn the output into journal-ready APA tables and text." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 28 28%22%3E%3Cdefs%3E%3Cpattern id=%22fc%22 width=%226%22 height=%226%22 patternUnits=%22userSpaceOnUse%22%3E%3Crect width=%226%22 height=%226%22 fill=%22%23fff%22/%3E%3Crect width=%223%22 height=%223%22 fill=%22%2315191E%22/%3E%3Crect x=%223%22 y=%223%22 width=%223%22 height=%223%22 fill=%22%2315191E%22/%3E%3C/pattern%3E%3Cpattern id=%22fh%22 width=%225%22 height=%225%22 patternUnits=%22userSpaceOnUse%22 patternTransform=%22rotate%2845%29%22%3E%3Crect width=%225%22 height=%225%22 fill=%22%23fff%22/%3E%3Crect width=%222.00%22 height=%225%22 fill=%22%2315191E%22/%3E%3C/pattern%3E%3C/defs%3E%3Crect x=%221%22 y=%221%22 width=%2212%22 height=%2212%22 rx=%223.2%22 fill=%22%2315191E%22/%3E%3Crect x=%2215.75%22 y=%221.75%22 width=%2210.5%22 height=%2210.5%22 rx=%222.6%22 fill=%22%23fff%22 stroke=%22%2315191E%22 stroke-width=%221.5%22/%3E%3Crect x=%221.75%22 y=%2215.75%22 width=%2210.5%22 height=%2210.5%22 rx=%222.6%22 fill=%22url%28%23fc%29%22 stroke=%22%2315191E%22 stroke-width=%221.5%22/%3E%3Crect x=%2215.75%22 y=%2215.75%22 width=%2210.5%22 height=%2210.5%22 rx=%222.6%22 fill=%22url%28%23fh%29%22 stroke=%22%2315191E%22 stroke-width=%221.5%22/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Familjen+Grotesk:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    corePlugins: { preflight: true },
+    theme: {
+      extend: {
+        colors: {
+          desk: '#DDE2DF', panel: '#F5F6F4', sunk: '#EEF1EF',
+          ink: { DEFAULT: '#15191E', 2: '#434B55', 3: '#66707B' },
+          rule: '#DCE1DE', bole: '#B23B2C', l1: '#C98212', l2: '#2C5D9E', pencil: '#5FA8E8',
+        },
+        fontFamily: {
+          display: ['Newsreader', 'Georgia', 'serif'],
+          sans: ['"Familjen Grotesk"', '"Segoe UI"', 'Arial', 'sans-serif'],
+          mono: ['"Courier Prime"', '"Courier New"', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+<link rel="stylesheet" href="css/app.css" />
+
+<!-- Client-side export libs (UMD globals: docx, JSZip) -->
+<script defer src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+
+<body>
+  <!-- ============ Topbar: brand · progress track · tools ============ -->
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="ESEM Analyzer — Mplus workbench for ESEM">
+      <svg width="34" height="34" viewBox="0 0 28 28" aria-hidden="true"><defs><pattern id="bm-c" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#fff"/><rect width="2" height="2" fill="#15191E"/><rect x="2" y="2" width="2" height="2" fill="#15191E"/></pattern><pattern id="bm-h" width="3.6" height="3.6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3.6" height="3.6" fill="#fff"/><rect width="1.44" height="3.6" fill="#15191E"/></pattern></defs><rect x="1" y="1" width="12" height="12" rx="3.2" fill="#15191E"/><rect x="15.75" y="1.75" width="10.5" height="10.5" rx="2.6" fill="#fff" stroke="#15191E" stroke-width="1.5"/><rect x="1.75" y="15.75" width="10.5" height="10.5" rx="2.6" fill="url(#bm-c)" stroke="#15191E" stroke-width="1.5"/><rect x="15.75" y="15.75" width="10.5" height="10.5" rx="2.6" fill="url(#bm-h)" stroke="#15191E" stroke-width="1.5"/></svg>
+      <span class="brand-text"><span class="brand-word">ESEM Analyzer</span><span class="brand-tr">Mplus workbench for ESEM</span></span>
+    </a>
+
+    <nav class="track" id="stepper" aria-label="Workflow steps">
+      <button class="trk" data-step="data" aria-current="step" data-tip="Load and name the variables"><span class="step-n st-prog">1</span><span>Data</span></button>
+      <span class="trk-sep" aria-hidden="true"></span>
+      <button class="trk" data-step="model" disabled data-tip="Factors and rotation"><span class="step-n">2</span><span>Model</span></button>
+      <span class="trk-sep" aria-hidden="true"></span>
+      <button class="trk" data-step="syntax" disabled data-tip="Generate the .inp files"><span class="step-n">3</span><span>Syntax</span></button>
+      <span class="trk-sep" aria-hidden="true"></span>
+      <button class="trk" data-step="results" disabled data-tip="Read the .out files into APA output"><span class="step-n">4</span><span>Results</span></button>
+    </nav>
+
+    <div class="top-tools">
+      <div id="mplusSlot"></div>
+      <button type="button" class="pill" id="guide-btn" data-tip="How it works, and how to run Mplus from here"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span class="pill-label">Guide</span></button>
+      <a class="pill" href="demo.html" aria-label="Guided demo" data-tip="Guided demo: a worked 3-factor example"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg><span class="pill-label">Guided demo</span></a>
+      <a class="pill" href="https://github.com/cahitgs/esem-analyzer" rel="noopener" aria-label="GitHub" data-tip="Source on GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/></svg><span class="pill-label">GitHub</span></a>
+    </div>
+  </header>
+
+  <!-- ============ Work area: settings on the left, the manuscript on the right ============ -->
+  <main class="work" id="work">
+    <div class="ctrl" id="ctrl">
+
+      <!-- ---- 1 · Data ---- -->
+      <section id="step-data" class="step-panel" data-panel="data">
+        <div class="ctrl-inner">
+          <header class="cc-head">
+            <div class="eyebrow">Step 1 · Data</div>
+            <h1 class="h1" id="data-title">Load the data</h1>
+            <p class="lead" id="data-lead">Mplus <code>.dat</code> or <code>.csv</code>, read in your browser and never uploaded. Sketch a factor model next; the manuscript on the right writes itself as you go.</p>
+          </header>
+          <div class="cc-body">
+            <div id="data-intake">
+              <div class="card">
+                <div class="card-h"><div class="flex items-start gap-3"><span class="num-badge" aria-hidden="true">1</span><div class="min-w-0"><h2 class="h3">Data file</h2><p class="small muted">Columns and the delimiter are detected automatically.</p></div></div></div>
+                <div class="card-b">
+                  <div class="drop" id="data-dropzone" role="button" tabindex="0" aria-label="Upload a data file">
+                    <input type="file" id="data-file-input" accept=".dat,.csv,.txt" hidden />
+                    <span class="drop-ic big"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
+                    <div class="drop-t">Drop your data file here</div>
+                    <p class="small muted">Free-format <code>.dat</code>, <code>.csv</code> or <code>.txt</code> — multiple delimiters and an optional header row are handled.</p>
+                    <button type="button" class="btn btn-sm" id="data-browse-btn">Choose file</button>
+                  </div>
+                  <p class="hint">Already have Mplus output? <button id="skip-to-results" class="link">Skip to reading .out files</button></p>
+                  <p class="hint">New here? <a href="demo.html" class="link">Take the guided demo</a></p>
+                </div>
+              </div>
+            </div>
+            <div id="data-review" hidden></div>
+          </div>
+          <div id="data-bar" class="contents"></div>
+        </div>
+      </section>
+
+      <!-- ---- 2 · Model ---- -->
+      <section id="step-model" class="step-panel" data-panel="model" hidden>
+        <div id="model-host" class="host"></div>
+      </section>
+
+      <!-- ---- 3 · Syntax ---- -->
+      <section id="step-syntax" class="step-panel" data-panel="syntax" hidden>
+        <div id="syntax-host" class="host"></div>
+      </section>
+
+      <!-- ---- 4 · Results ---- -->
+      <section id="step-results" class="step-panel" data-panel="results" hidden>
+        <div id="results-host" class="host"></div>
+      </section>
+    </div>
+
+    <div class="desk">
+      <div class="desk-scroll" id="deskScroll">
+        <div class="desk-bar" id="deskBar">
+          <div class="db-status"><span class="db-meter" aria-hidden="true"><i id="db-meter" style="transform:scaleX(0)"></i></span><span class="db-txt" id="db-txt">Manuscript draft · 0/5 sections</span></div>
+          <div class="db-tools" id="db-tools"></div>
+        </div>
+        <article class="paper-sheet" id="paper" lang="en"><div id="paperBody"></div></article>
+      </div>
+      <section class="mplus-sheet" id="mplusSheet" aria-label="Mplus" tabindex="-1" inert></section>
+    </div>
+  </main>
+
+  <dialog class="dlg" id="guide" aria-label="Guide"></dialog>
+  <div class="toasts" id="toast-host" aria-live="polite"></div>
+
+<script type="module" src="js/main.js"></script>
+<!-- GoatCounter visitor analytics (anonymous, cookie-free page counts; skips localhost).
+     Dedicated site for this project - dashboard: https://esem-mplus.goatcounter.com
+     ("Locations" = countries, "Referrers" = where visitors came from). -->
+<script data-goatcounter="https://esem-mplus.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

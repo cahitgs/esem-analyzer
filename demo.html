@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guided demo · ESEM Analyzer</title>
+<meta name="description" content="A step-by-step worked example mirroring the 3-factor / bifactor structure of Swami, Maïano & Morin (2023): build CFA, ESEM, bifactor, multi-group and longitudinal invariance, and ESEM-within-CFA syntax, then read the output as Morin-style APA tables, diagrams, and Word export." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 28 28%22%3E%3Crect x=%221%22 y=%221%22 width=%2212%22 height=%2212%22 rx=%223.2%22 fill=%22%2315191E%22/%3E%3Crect x=%2215.75%22 y=%221.75%22 width=%2210.5%22 height=%2210.5%22 rx=%222.6%22 fill=%22%23fff%22 stroke=%22%2315191E%22 stroke-width=%221.5%22/%3E%3Crect x=%221.75%22 y=%2215.75%22 width=%2210.5%22 height=%2210.5%22 rx=%222.6%22 fill=%22%23fff%22 stroke=%22%2315191E%22 stroke-width=%221.5%22/%3E%3Crect x=%2215.75%22 y=%2215.75%22 width=%2210.5%22 height=%2210.5%22 rx=%222.6%22 fill=%22%23fff%22 stroke=%22%2315191E%22 stroke-width=%221.5%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Familjen+Grotesk:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { corePlugins: { preflight: true }, theme: { extend: {
+    colors: { desk: '#DDE2DF', panel: '#F5F6F4', sunk: '#EEF1EF', ink: { DEFAULT: '#15191E', 2: '#434B55', 3: '#66707B' }, rule: '#DCE1DE', l1: '#C98212', l2: '#2C5D9E', pencil: '#5FA8E8' },
+    fontFamily: { display: ['Newsreader', 'Georgia', 'serif'], sans: ['"Familjen Grotesk"', '"Segoe UI"', 'Arial', 'sans-serif'], mono: ['"Courier Prime"', '"Courier New"', 'monospace'] },
+  } } };
+</script>
+<link rel="stylesheet" href="css/app.css" />
+<style>
+  /* the guide is one wide sheet on the desk; the topbar track links to its sections */
+  .work.demo { grid-template-columns: minmax(0, 1fr); }
+  .desk-scroll { scroll-behavior: smooth; }
+  .paper-sheet.guide { max-width: 980px; margin-top: 28px; }
+  .trk { text-decoration: none; }
+  .trk .step-n { background: #fff; }
+  .guide .lead-p { font-size: 18px; line-height: 1.65; }
+  .guide .row { margin: 18px 0 6px; }
+  .guide .btn { font-family: var(--ui); }
+  .guide .chips { margin: 8px 0 4px; }
+  .guide .chip { height: 36px; padding: 0 14px; font-size: 14px; text-decoration: none; }
+  .guide .step { display: flex; align-items: center; gap: 12px; margin: 42px 0 8px; font: 600 22px/1.3 var(--serif); letter-spacing: -0.01em; color: #111; }
+  .guide .step .num-badge { font-family: var(--ui); }
+  .guide p.body { margin: 0 0 10px; }
+  .shot { margin: 14px 0 4px; border: 1px solid var(--hair); border-radius: 12px; overflow: hidden; background: #fff; box-shadow: var(--sh-2); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .guide .apa-table th:first-child, .guide .apa-table td:first-child { text-align: left; }
+  .guide .apa-table td { white-space: normal; text-align: left; }
+  .guide .apa-table th { text-align: left; }
+  .guide .closing { margin-top: 56px; padding-top: 28px; border-top: 1px solid var(--rule); text-align: center; }
+  .guide .closing .rep-h { margin-top: 0; }
+  .guide .notes { margin-top: 40px; font-size: 13.5px; line-height: 1.55; color: var(--ink-3); }
+  .guide .notes p { margin: 0 0 4px; }
+  @media (max-width: 959px) { .paper-sheet.guide { margin-top: 10px; } }
+</style>
+</head>
+
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="ESEM Analyzer — Mplus workbench for ESEM">
+      <svg width="34" height="34" viewBox="0 0 28 28" aria-hidden="true"><defs><pattern id="bm-c" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#fff"/><rect width="2" height="2" fill="#15191E"/><rect x="2" y="2" width="2" height="2" fill="#15191E"/></pattern><pattern id="bm-h" width="3.6" height="3.6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3.6" height="3.6" fill="#fff"/><rect width="1.44" height="3.6" fill="#15191E"/></pattern></defs><rect x="1" y="1" width="12" height="12" rx="3.2" fill="#15191E"/><rect x="15.75" y="1.75" width="10.5" height="10.5" rx="2.6" fill="#fff" stroke="#15191E" stroke-width="1.5"/><rect x="1.75" y="15.75" width="10.5" height="10.5" rx="2.6" fill="url(#bm-c)" stroke="#15191E" stroke-width="1.5"/><rect x="15.75" y="15.75" width="10.5" height="10.5" rx="2.6" fill="url(#bm-h)" stroke="#15191E" stroke-width="1.5"/></svg>
+      <span class="brand-text"><span class="brand-word">ESEM Analyzer</span><span class="brand-tr">Guided demo · 3-factor worked example</span></span>
+    </a>
+    <nav class="track" aria-label="Sections of the guide">
+      <a class="trk" href="#data"><span class="step-n">1</span><span>Data</span></a>
+      <span class="trk-sep" aria-hidden="true"></span>
+      <a class="trk" href="#model"><span class="step-n">2</span><span>Model</span></a>
+      <span class="trk-sep" aria-hidden="true"></span>
+      <a class="trk" href="#syntax"><span class="step-n">3</span><span>Syntax</span></a>
+      <span class="trk-sep" aria-hidden="true"></span>
+      <a class="trk" href="#results"><span class="step-n">4</span><span>Results</span></a>
+    </nav>
+    <div class="top-tools">
+      <a class="btn btn-sm btn-primary" href="index.html">Open the app</a>
+      <a class="pill" href="https://github.com/cahitgs/esem-analyzer" rel="noopener" aria-label="GitHub" data-tip="Source on GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/></svg><span class="pill-label">GitHub</span></a>
+    </div>
+  </header>
+
+  <main class="work demo">
+    <div class="desk">
+      <div class="desk-scroll">
+        <article class="paper-sheet guide">
+          <div class="ms-run"><span>ESEM Analyzer · guided demo</span><span>Synthetic data · real Mplus output</span></div>
+          <h1 class="ms-title">A three-factor worked example</h1>
+          <p class="ms-meta">Every model in this guide ships with its real Mplus 8.3 output. Nothing to install; your files never leave the page.</p>
+
+          <p class="lead-p">A <b>synthetic</b> 15-item dataset mirrors the 3-factor / bifactor structure of Swami, Maïano &amp; Morin (2023). Follow the same four steps the app uses, Data → Model → Syntax → Results, and open any step with the example preloaded: CFA, ESEM, bifactor, invariance across groups <i>and</i> across time, and ESEM-within-CFA.</p>
+          <div class="row">
+            <a class="btn btn-primary" href="index.html?demo=measurement">Compare all measurement models</a>
+            <a class="btn" href="index.html">Build it from scratch</a>
+          </div>
+
+          <h2 class="rep-h">The example dataset</h2>
+          <table class="apa-table">
+            <caption><b>Table.</b> Structure of the synthetic example</caption>
+            <thead><tr><th>Part</th><th>Items</th><th>Role in the models</th></tr></thead>
+            <tbody>
+              <tr><td>F1</td><td>i1–i5</td><td>specific factor (first-order models)</td></tr>
+              <tr><td>F2</td><td>i6–i10</td><td>specific factor</td></tr>
+              <tr><td>F3</td><td>i11–i15</td><td>specific factor</td></tr>
+              <tr><td>G</td><td>all 15</td><td>general factor (bifactor models)</td></tr>
+              <tr><td>gender</td><td>2 groups</td><td>grouping variable for the invariance sequence</td></tr>
+              <tr><td>Second file</td><td>12 items × 2 waves</td><td>longitudinal invariance sequences</td></tr>
+            </tbody>
+          </table>
+          <p class="apa-note"><i>Note.</i> 600 respondents in <span class="mono">data.dat</span> (space-delimited, no header, Mplus free format). Fully synthetic; no real participants, and the article's data are not redistributed.</p>
+
+          <p class="sub-h">Jump straight to a result</p>
+          <div class="chips">
+            <a class="chip" href="index.html?demo=results">CFA</a>
+            <a class="chip" href="index.html?demo=esem">ESEM · Geomin</a>
+            <a class="chip" href="index.html?demo=target">ESEM · Target</a>
+            <a class="chip" href="index.html?demo=bifactorcfa">Bifactor-CFA</a>
+            <a class="chip" href="index.html?demo=bifactor">Bifactor-ESEM</a>
+            <a class="chip" href="index.html?demo=invariance">Group invariance ×6</a>
+            <a class="chip" href="index.html?demo=longitudinal">Longitudinal ×12</a>
+            <a class="chip" href="index.html?demo=ewc">ESEM-within-CFA</a>
+          </div>
+
+          <h2 class="rep-h" id="data">The workflow, step by step</h2>
+
+          <h3 class="step"><span class="num-badge" aria-hidden="true">1</span>The data</h3>
+          <p class="body"><span class="mono">data.dat</span> has 16 columns: items <span class="mono">i1–i15</span> and <span class="mono">gender</span>. When you load your own file, the app detects the delimiter, a header row and decimal commas, and can write a clean Mplus-ready <span class="mono">.dat</span> from a semicolon CSV.</p>
+          <div class="row">
+            <a class="btn btn-sm" href="example-dataset/data.dat" download>Download data.dat</a>
+            <a class="btn btn-sm" href="index.html">Open the Data step</a>
+          </div>
+
+          <h3 class="step" id="model"><span class="num-badge" aria-hidden="true">2</span>Sketch the model</h3>
+          <p class="body">On the Λ target-pattern matrix set three factors (i1–i5 → F1, i6–i10 → F2, i11–i15 → F3), pick a rotation (Geomin or Target), the estimator (MLR), and the models to generate. The manuscript on the right draws the hypothesized model as Figure 1 while you click; the syntax preview opens on the Mplus sheet.</p>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/02-model-builder.png?v=7" alt="The Model step: items, factors and the Λ target-pattern matrix on the left; the manuscript with the hypothesized model on the right" loading="lazy" /></figure>
+          <p class="tcap fig"><b></b></p><p class="tcap"><i>The Model step with the three-factor pattern preloaded.</i></p>
+          <div class="row"><a class="btn btn-sm" href="index.html?demo=model">Open the Model step (3 factors preloaded)</a></div>
+
+          <h3 class="step" id="syntax"><span class="num-badge" aria-hidden="true">3</span>Generate the syntax, run it</h3>
+          <p class="body">The app writes exact Mplus <span class="mono">.inp</span> for every model: CFA, ESEM (Geomin and Target), bifactor-CFA, bifactor-ESEM and the six invariance steps, wrapped under the 90-character limit. Click a file to read it on the Mplus sheet. Started on your own computer (<span class="mono">node serve.mjs</span>, or the desktop <span class="mono">.exe</span> from the releases page), the step finds your Mplus, shows its version in the topbar, and <b>Run all in Mplus</b> runs the models one after another; each output joins the manuscript as it finishes. Online, download the files or use <b>Auto mode</b> (Chrome/Edge): a local folder with a <span class="mono">RUN-ALL.bat</span> that imports the results as Mplus writes them. The optional <b>Convergence aids</b> card adds Morin's remedies for stubborn models.</p>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/03-syntax.png?v=7" alt="The Syntax step: input files, the Run in Mplus card with per-model status, and convergence aids" loading="lazy" /></figure>
+          <p class="tcap fig"><b></b></p><p class="tcap"><i>The Syntax step on a computer with Mplus: two models run and written into the manuscript.</i></p>
+          <div class="row"><a class="btn btn-sm" href="index.html?demo=syntax">Open the Syntax step</a></div>
+
+          <h3 class="step" id="results"><span class="num-badge" aria-hidden="true">4</span>Read it as APA</h3>
+          <p class="body">Each <span class="mono">.out</span> becomes a row of the fit table and a <b>Morin-style loadings table</b> (Hoyle Handbook, Table 2): items grouped into subscale blocks with a per-block ω row, target loadings bold, non-significant loadings italic, plus auto-written prose and an interactive path diagram. Several outputs share one fit-comparison table. <b>Copy for Word</b> and <b>.docx</b> export the very same tables in the same layout. For this demo the runs are already done: every output in <span class="mono">example-dataset/</span> is a real Mplus 8.3 result.</p>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/04-results.png?v=7" alt="The Results step: output files on the left, the goodness-of-fit table and standardized loadings in the manuscript" loading="lazy" /></figure>
+          <p class="tcap fig"><b></b></p><p class="tcap"><i>Five measurement models compared in one fit table.</i></p>
+          <div class="row">
+            <a class="btn btn-sm btn-primary" href="index.html?demo=measurement">All five measurement models</a>
+            <a class="btn btn-sm" href="index.html?demo=results">CFA + ESEM + bifactor</a>
+            <a class="btn btn-sm" href="index.html?demo=bifactorcfa">Bifactor-CFA</a>
+          </div>
+
+          <h3 class="step"><span class="num-badge" aria-hidden="true">5</span>Bifactor diagram</h3>
+          <p class="body">The diagrams follow the article's figures and are interactive: toggle cross-loadings and uniquenesses, show or hide factors, drag the ellipses, export SVG or PNG. Colour carries meaning: amber ellipses are the specific factors, the navy ellipse is the general factor reaching every item.</p>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/06-bifactor-diagram.png?v=7" alt="Bifactor path diagram in the manuscript with its options card on the left" loading="lazy" /></figure>
+          <p class="tcap fig"><b></b></p><p class="tcap"><i>Bifactor-ESEM path diagram: three specific factors and the general factor.</i></p>
+          <div class="row"><a class="btn btn-sm" href="index.html?demo=bifactor">Open the bifactor-ESEM result</a></div>
+
+          <h3 class="step"><span class="num-badge" aria-hidden="true">6</span>Invariance across groups</h3>
+          <p class="body">The six <span class="mono">inv_*.out</span> files (men vs women) collapse into one comparison table: configural → metric → scalar → strict → variance–covariance → latent means, with Satorra–Bentler scaled Δχ², ΔCFI, ΔRMSEA and a supported / not supported verdict (Chen, 2007).</p>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/07-invariance.png?v=7" alt="Measurement invariance comparison table in the manuscript" loading="lazy" /></figure>
+          <p class="tcap fig"><b></b></p><p class="tcap"><i>Tests of measurement invariance across two groups.</i></p>
+          <div class="row"><a class="btn btn-sm" href="index.html?demo=invariance">Open the invariance sequence</a></div>
+
+          <h3 class="step"><span class="num-badge" aria-hidden="true">7</span>Invariance across time</h3>
+          <p class="body">The same six steps also run <b>longitudinally</b>: one single-group model per step, each wave as its own ESEM set, loadings equated across waves, every indicator's residual correlated with itself over time. Sequences are generated for CFA, ESEM and <b>bifactor-ESEM</b>. This demo drops twelve outputs from a 2-wave well-being example: invariance holds through variance–covariance, and the latent-means step flags the built-in growth, which the bifactor sequence places on the general factor only.</p>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/08-longitudinal.png?v=7" alt="Longitudinal invariance comparison tables for ESEM and bifactor-ESEM" loading="lazy" /></figure>
+          <p class="tcap fig"><b></b></p><p class="tcap"><i>Longitudinal invariance tables for the ESEM and bifactor-ESEM sequences.</i></p>
+          <div class="row"><a class="btn btn-sm" href="index.html?demo=longitudinal">Open the longitudinal sequences</a></div>
+
+          <h3 class="step"><span class="num-badge" aria-hidden="true">8</span>Convert to ESEM-within-CFA</h3>
+          <p class="body">Because the ESEM output carries a SVALUES block, Results shows an <b>ESEM-within-CFA</b> card: it picks a referent indicator per factor, fixes that referent's cross-loadings to their ESEM values, and writes a runnable CFA you can embed in larger SEM, MIMIC or DIF models (Morin's referent method). Verified in Mplus to reproduce the source ESEM exactly (df 63, log-likelihood −11107.13 in both). On a computer with Mplus the card runs the new model from here too.</p>
+          <figure class="shot"><img width="2400" height="1500" src="docs/img/05-esem-within-cfa.png?v=7" alt="ESEM-within-CFA card with referent pickers and the generated syntax" loading="lazy" /></figure>
+          <p class="tcap fig"><b></b></p><p class="tcap"><i>The ESEM-within-CFA card: referents, generated syntax, identification check.</i></p>
+          <div class="row"><a class="btn btn-sm" href="index.html?demo=ewc">Open the ESEM-within-CFA demo</a></div>
+
+          <div class="closing">
+            <h2 class="rep-h">Ready to use your own data?</h2>
+            <p>Bring a <span class="mono">.dat</span> or <span class="mono">.csv</span> and follow the same steps: Data → Model → Syntax → Results.</p>
+            <div class="row" style="justify-content:center"><a class="btn btn-lg btn-primary" href="index.html">Open the app</a></div>
+          </div>
+
+          <div class="notes">
+            <p>Table format and syntax follow Swami, Maïano &amp; Morin (2023), <i>A guide to ESEM and bifactor-ESEM</i>, <i>Body Image</i> 47. The example data is synthetic and mirrors that 3-factor structure.</p>
+            <p>Independent tool · not affiliated with Mplus or the article authors · <a class="link" href="https://github.com/cahitgs/esem-analyzer">source on GitHub</a></p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </main>
+<script type="module">
+  // the ink tooltip balloon for [data-tip] (the app's shell module provides it)
+  import './js/shell.js';
+</script>
+<!-- GoatCounter visitor analytics (anonymous, cookie-free page counts; skips localhost).
+     Dedicated site for this project - dashboard: https://esem-mplus.goatcounter.com
+     ("Locations" = countries, "Referrers" = where visitors came from). -->
+<script data-goatcounter="https://esem-mplus.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

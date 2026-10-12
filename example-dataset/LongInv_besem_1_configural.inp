@@ -1,0 +1,47 @@
+TITLE:
+Longitudinal invariance (bifactor-ESEM) - Configural
+DATA:
+FILE = "iyiolus.dat";
+VARIABLE:
+NAMES ARE duy1_t1 duy2_t1 duy3_t1 duy4_t1 psi1_t1 psi2_t1 psi3_t1 psi4_t1 sos1_t1
+  sos2_t1 sos3_t1 sos4_t1 duy1_t2 duy2_t2 duy3_t2 duy4_t2 psi1_t2 psi2_t2 psi3_t2
+  psi4_t2 sos1_t2 sos2_t2 sos3_t2 sos4_t2 okul;
+USEVARIABLES ARE duy1_t1 duy2_t1 duy3_t1 duy4_t1 psi1_t1 psi2_t1 psi3_t1 psi4_t1
+  sos1_t1 sos2_t1 sos3_t1 sos4_t1 duy1_t2 duy2_t2 duy3_t2 duy4_t2 psi1_t2 psi2_t2
+  psi3_t2 psi4_t2 sos1_t2 sos2_t2 sos3_t2 sos4_t2;
+MISSING ARE ALL (999);
+ANALYSIS:
+ESTIMATOR IS MLR;
+ROTATION=TARGET(ORTHOGONAL);
+ITERATIONS = 100000;
+MODEL:
+G1 BY duy1_t1 duy2_t1 duy3_t1 duy4_t1 psi1_t1 psi2_t1 psi3_t1 psi4_t1 sos1_t1 sos2_t1
+  sos3_t1 sos4_t1 (*t1);
+F1 BY duy1_t1 duy2_t1 duy3_t1 duy4_t1 psi1_t1~0 psi2_t1~0 psi3_t1~0 psi4_t1~0
+  sos1_t1~0 sos2_t1~0 sos3_t1~0 sos4_t1~0 (*t1);
+F2 BY duy1_t1~0 duy2_t1~0 duy3_t1~0 duy4_t1~0 psi1_t1 psi2_t1 psi3_t1 psi4_t1
+  sos1_t1~0 sos2_t1~0 sos3_t1~0 sos4_t1~0 (*t1);
+F3 BY duy1_t1~0 duy2_t1~0 duy3_t1~0 duy4_t1~0 psi1_t1~0 psi2_t1~0 psi3_t1~0 psi4_t1~0
+  sos1_t1 sos2_t1 sos3_t1 sos4_t1 (*t1);
+G2 BY duy1_t2 duy2_t2 duy3_t2 duy4_t2 psi1_t2 psi2_t2 psi3_t2 psi4_t2 sos1_t2 sos2_t2
+  sos3_t2 sos4_t2 (*t2);
+F4 BY duy1_t2 duy2_t2 duy3_t2 duy4_t2 psi1_t2~0 psi2_t2~0 psi3_t2~0 psi4_t2~0
+  sos1_t2~0 sos2_t2~0 sos3_t2~0 sos4_t2~0 (*t2);
+F5 BY duy1_t2~0 duy2_t2~0 duy3_t2~0 duy4_t2~0 psi1_t2 psi2_t2 psi3_t2 psi4_t2
+  sos1_t2~0 sos2_t2~0 sos3_t2~0 sos4_t2~0 (*t2);
+F6 BY duy1_t2~0 duy2_t2~0 duy3_t2~0 duy4_t2~0 psi1_t2~0 psi2_t2~0 psi3_t2~0 psi4_t2~0
+  sos1_t2 sos2_t2 sos3_t2 sos4_t2 (*t2);
+duy1_t1 WITH duy1_t2;
+duy2_t1 WITH duy2_t2;
+duy3_t1 WITH duy3_t2;
+duy4_t1 WITH duy4_t2;
+psi1_t1 WITH psi1_t2;
+psi2_t1 WITH psi2_t2;
+psi3_t1 WITH psi3_t2;
+psi4_t1 WITH psi4_t2;
+sos1_t1 WITH sos1_t2;
+sos2_t1 WITH sos2_t2;
+sos3_t1 WITH sos3_t2;
+sos4_t1 WITH sos4_t2;
+OUTPUT:
+SAMPSTAT STANDARDIZED RESIDUAL CINTERVAL MODINDICES (3.0) TECH2 TECH4;

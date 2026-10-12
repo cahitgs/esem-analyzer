@@ -1,0 +1,33 @@
+# Copyrighted / third-party material (never publish)
+*.pdf
+*.docx
+1-s2.0-*
+WebPaper1.pdf
+ESEM-Kuram-vs-Uygulama.pdf
+_doc.html
+# Morin's Hoyle-Handbook ESEM chapter + supplements (pre-pub, copyrighted; incl. Ch27-Data*.dat)
+morin gönderdi/
+
+# Local / personal notes & data not for distribution
+# deneme/ bundles Morin's freely-distributed raw ESEM.dat (not ours to republish);
+# curated screenshots live in docs/img/.
+deneme/
+deneme-4faktor/
+temporary screenshots/
+
+# Dev-only helper scripts
+_*.mjs
+topdf.mjs
+
+# Local Mplus runs written by serve.mjs (inputs, data and outputs of each run)
+mplus-runs/
+
+# Misc
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# Single-executable build (tools/build-exe.mjs)
+build/
+dist/

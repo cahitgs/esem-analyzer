@@ -1,0 +1,630 @@
+Mplus VERSION 8.3
+MUTHEN & MUTHEN
+06/22/2026   1:47 AM
+
+INPUT INSTRUCTIONS
+
+  TITLE:
+  MG metric
+  DATA:
+  FILE =
+  "C:/Users/tekno/Desktop/kitaplar/ESEM/supplementary_materials_esem/Data/ESEM.dat";
+  VARIABLE:
+  NAMES ARE X1 X2 X3 X4 X5 X6 Y1 Y2 Y3 Y4 Y5 Y6 GV;
+  USEVARIABLES ARE X1 X2 X3 X4 X5 X6;
+  GROUPING IS GV (1 = group1 2 = Group2);
+  ANALYSIS:
+  ESTIMATOR IS MLR;
+  ROTATION=GEOMIN(OBLIQUE, .5);
+  MODEL:
+  F1-F2 BY X1 X2 X3 X4 X5 X6 (*1);
+  [X1 X2 X3 X4 X5 X6];
+  X1 X2 X3 X4 X5 X6;
+  F1-F2@1;
+  [F1-F2@0];
+  MODEL Group2:
+  [X1 X2 X3 X4 X5 X6];
+  X1 X2 X3 X4 X5 X6;
+  F1-F2;
+  OUTPUT:
+  STANDARDIZED;
+
+
+
+INPUT READING TERMINATED NORMALLY
+
+
+
+
+MG metric
+
+SUMMARY OF ANALYSIS
+
+Number of groups                                                 2
+Number of observations
+   Group GROUP1                                               3000
+   Group GROUP2                                               1500
+   Total sample size                                          4500
+
+Number of dependent variables                                    6
+Number of independent variables                                  0
+Number of continuous latent variables                            2
+
+Observed dependent variables
+
+  Continuous
+   X1          X2          X3          X4          X5          X6
+
+Continuous latent variables
+
+  EFA factors
+  *1:   F1          F2
+
+Variables with special functions
+
+  Grouping variable     GV
+
+Estimator                                                      MLR
+Rotation                                                    GEOMIN
+Row standardization                                     COVARIANCE
+Type of rotation                                           OBLIQUE
+Epsilon value                                            0.500D+00
+Information matrix                                        OBSERVED
+Maximum number of iterations                                  1000
+Convergence criterion                                    0.500D-04
+Maximum number of steepest descent iterations                   20
+Optimization Specifications for the Exploratory Factor Analysis
+Rotation Algorithm
+  Number of random starts                                       30
+  Maximum number of iterations                               10000
+  Derivative convergence criterion                       0.100D-04
+
+Input data file(s)
+  C:/Users/tekno/Desktop/kitaplar/ESEM/supplementary_materials_esem/Data/ESEM.da
+
+Input data format  FREE
+
+
+
+UNIVARIATE SAMPLE STATISTICS
+
+
+     UNIVARIATE HIGHER-ORDER MOMENT DESCRIPTIVE STATISTICS FOR GROUP1
+
+         Variable/         Mean/     Skewness/   Minimum/ % with                Percentiles
+        Sample Size      Variance    Kurtosis    Maximum  Min/Max      20%/60%    40%/80%    Median
+
+     X1                    0.514       0.071      -2.891    0.03%      -0.387      0.237      0.484
+            3000.000       1.145      -0.059       4.574    0.03%       0.776      1.410
+     X2                    0.298       0.016      -2.872    0.03%      -0.511      0.063      0.306
+            3000.000       0.849      -0.153       3.130    0.03%       0.550      1.077
+     X3                    0.182       0.027      -2.998    0.03%      -0.678     -0.084      0.172
+            3000.000       1.035      -0.158       3.387    0.03%       0.438      1.038
+     X4                    0.550       0.038      -2.856    0.03%      -0.440      0.268      0.561
+            3000.000       1.315      -0.102       5.091    0.03%       0.820      1.513
+     X5                    0.321       0.046      -2.731    0.03%      -0.406      0.109      0.295
+            3000.000       0.744       0.073       3.567    0.03%       0.535      1.033
+     X6                    0.501       0.027      -2.640    0.03%      -0.206      0.276      0.483
+            3000.000       0.713      -0.052       3.272    0.03%       0.688      1.229
+
+
+     UNIVARIATE HIGHER-ORDER MOMENT DESCRIPTIVE STATISTICS FOR GROUP2
+
+         Variable/         Mean/     Skewness/   Minimum/ % with                Percentiles
+        Sample Size      Variance    Kurtosis    Maximum  Min/Max      20%/60%    40%/80%    Median
+
+     X1                    0.940      -0.108      -2.468    0.07%       0.067      0.673      0.951
+            1500.000       1.105      -0.121       4.454    0.07%       1.232      1.862
+     X2                    0.754      -0.135      -2.349    0.07%       0.027      0.544      0.784
+            1500.000       0.798       0.094       3.576    0.07%       1.001      1.512
+     X3                    1.007      -0.006      -1.795    0.07%       0.190      0.781      1.023
+            1500.000       0.977      -0.087       4.214    0.07%       1.255      1.834
+     X4                    1.031      -0.004      -2.723    0.07%       0.088      0.767      1.035
+            1500.000       1.216      -0.036       4.513    0.07%       1.303      1.961
+     X5                    0.654       0.090      -1.759    0.07%      -0.042      0.427      0.656
+            1500.000       0.674       0.106       3.887    0.07%       0.863      1.336
+     X6                    0.721      -0.048      -2.202    0.07%       0.030      0.523      0.733
+            1500.000       0.700       0.338       3.990    0.07%       0.924      1.381
+
+
+THE MODEL ESTIMATION TERMINATED NORMALLY
+
+
+
+MODEL FIT INFORMATION
+
+Number of Free Parameters                       38
+
+Loglikelihood
+
+          H0 Value                      -32459.272
+          H0 Scaling Correction Factor      1.0023
+            for MLR
+          H1 Value                      -32453.449
+          H1 Scaling Correction Factor      1.0013
+            for MLR
+
+Information Criteria
+
+          Akaike (AIC)                   64994.545
+          Bayesian (BIC)                 65238.194
+          Sample-Size Adjusted BIC       65117.445
+            (n* = (n + 2) / 24)
+
+Chi-Square Test of Model Fit
+
+          Value                             11.655*
+          Degrees of Freedom                    16
+          P-Value                           0.7673
+          Scaling Correction Factor         0.9992
+            for MLR
+
+Chi-Square Contribution From Each Group
+
+          GROUP1                             4.701
+          GROUP2                             6.955
+
+*   The chi-square value for MLM, MLMV, MLR, ULSMV, WLSM and WLSMV cannot be used
+    for chi-square difference testing in the regular way.  MLM, MLR and WLSM
+    chi-square difference testing is described on the Mplus website.  MLMV, WLSMV,
+    and ULSMV difference testing is done using the DIFFTEST option.
+
+RMSEA (Root Mean Square Error Of Approximation)
+
+          Estimate                           0.000
+          90 Percent C.I.                    0.000  0.014
+          Probability RMSEA <= .05           1.000
+
+CFI/TLI
+
+          CFI                                1.000
+          TLI                                1.001
+
+Chi-Square Test of Model Fit for the Baseline Model
+
+          Value                           9551.897
+          Degrees of Freedom                    30
+          P-Value                           0.0000
+
+SRMR (Standardized Root Mean Square Residual)
+
+          Value                              0.006
+
+
+
+MODEL RESULTS
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+Group GROUP1
+
+ F1       BY
+    X1                 0.884      0.020     44.607      0.000
+    X2                 0.615      0.018     34.526      0.000
+    X3                 0.517      0.018     29.455      0.000
+    X4                 0.125      0.012     10.766      0.000
+    X5                 0.120      0.012     10.156      0.000
+    X6                -0.057      0.014     -3.906      0.000
+
+ F2       BY
+    X1                -0.013      0.008     -1.595      0.111
+    X2                 0.239      0.015     15.516      0.000
+    X3                 0.337      0.016     20.538      0.000
+    X4                 0.893      0.020     43.746      0.000
+    X5                 0.588      0.015     38.000      0.000
+    X6                 0.478      0.016     30.643      0.000
+
+ F2       WITH
+    F1                 0.431      0.013     31.996      0.000
+
+ Means
+    F1                 0.000      0.000    999.000    999.000
+    F2                 0.000      0.000    999.000    999.000
+
+ Intercepts
+    X1                 0.514      0.020     26.328      0.000
+    X2                 0.298      0.017     17.699      0.000
+    X3                 0.182      0.019      9.775      0.000
+    X4                 0.550      0.021     26.279      0.000
+    X5                 0.321      0.016     20.389      0.000
+    X6                 0.501      0.015     32.463      0.000
+
+ Variances
+    F1                 1.000      0.000    999.000    999.000
+    F2                 1.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1                 0.377      0.026     14.709      0.000
+    X2                 0.285      0.013     22.665      0.000
+    X3                 0.502      0.015     32.644      0.000
+    X4                 0.405      0.022     18.420      0.000
+    X5                 0.322      0.012     26.196      0.000
+    X6                 0.510      0.015     34.156      0.000
+
+Group GROUP2
+
+ F1       BY
+    X1                 0.884      0.020     44.607      0.000
+    X2                 0.615      0.018     34.526      0.000
+    X3                 0.517      0.018     29.455      0.000
+    X4                 0.125      0.012     10.766      0.000
+    X5                 0.120      0.012     10.156      0.000
+    X6                -0.057      0.014     -3.906      0.000
+
+ F2       BY
+    X1                -0.013      0.008     -1.595      0.111
+    X2                 0.239      0.015     15.516      0.000
+    X3                 0.337      0.016     20.538      0.000
+    X4                 0.893      0.020     43.746      0.000
+    X5                 0.588      0.015     38.000      0.000
+    X6                 0.478      0.016     30.643      0.000
+
+ F2       WITH
+    F1                 0.337      0.034      9.974      0.000
+
+ Means
+    F1                 0.000      0.000    999.000    999.000
+    F2                 0.000      0.000    999.000    999.000
+
+ Intercepts
+    X1                 0.940      0.027     34.621      0.000
+    X2                 0.754      0.023     32.702      0.000
+    X3                 1.007      0.026     39.440      0.000
+    X4                 1.031      0.028     36.204      0.000
+    X5                 0.654      0.021     30.829      0.000
+    X6                 0.721      0.022     33.361      0.000
+
+ Variances
+    F1                 0.908      0.054     16.706      0.000
+    F2                 0.931      0.054     17.274      0.000
+
+ Residual Variances
+    X1                 0.395      0.030     12.999      0.000
+    X2                 0.309      0.018     17.593      0.000
+    X3                 0.514      0.022     23.554      0.000
+    X4                 0.385      0.028     13.679      0.000
+    X5                 0.295      0.015     19.778      0.000
+    X6                 0.494      0.022     21.993      0.000
+
+
+STANDARDIZED MODEL RESULTS
+
+
+STDYX Standardization
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+Group GROUP1
+
+ F1       BY
+    X1                 0.825      0.015     56.512      0.000
+    X2                 0.668      0.017     39.551      0.000
+    X3                 0.509      0.015     33.225      0.000
+    X4                 0.109      0.010     10.984      0.000
+    X5                 0.139      0.013     10.336      0.000
+    X6                -0.067      0.017     -3.895      0.000
+
+ F2       BY
+    X1                -0.012      0.008     -1.584      0.113
+    X2                 0.260      0.016     15.901      0.000
+    X3                 0.332      0.016     21.262      0.000
+    X4                 0.779      0.014     57.527      0.000
+    X5                 0.682      0.014     47.101      0.000
+    X6                 0.564      0.016     34.871      0.000
+
+ F2       WITH
+    F1                 0.431      0.013     31.996      0.000
+
+ Means
+    F1                 0.000      0.000    999.000    999.000
+    F2                 0.000      0.000    999.000    999.000
+
+ Intercepts
+    X1                 0.480      0.019     25.376      0.000
+    X2                 0.324      0.019     17.346      0.000
+    X3                 0.179      0.018      9.733      0.000
+    X4                 0.480      0.019     25.218      0.000
+    X5                 0.373      0.019     19.894      0.000
+    X6                 0.591      0.019     30.385      0.000
+
+ Variances
+    F1                 1.000      0.000    999.000    999.000
+    F2                 1.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1                 0.328      0.022     14.865      0.000
+    X2                 0.336      0.015     22.532      0.000
+    X3                 0.486      0.014     34.540      0.000
+    X4                 0.308      0.017     17.908      0.000
+    X5                 0.434      0.016     27.007      0.000
+    X6                 0.710      0.015     47.129      0.000
+
+Group GROUP2
+
+ F1       BY
+    X1                 0.804      0.018     44.776      0.000
+    X2                 0.653      0.019     34.799      0.000
+    X3                 0.498      0.018     28.428      0.000
+    X4                 0.108      0.011     10.160      0.000
+    X5                 0.139      0.015      9.520      0.000
+    X6                -0.065      0.016     -3.936      0.000
+
+ F2       BY
+    X1                -0.012      0.008     -1.608      0.108
+    X2                 0.257      0.017     14.788      0.000
+    X3                 0.329      0.017     19.568      0.000
+    X4                 0.781      0.016     48.389      0.000
+    X5                 0.689      0.016     42.582      0.000
+    X6                 0.555      0.020     28.319      0.000
+
+ F2       WITH
+    F1                 0.367      0.034     10.827      0.000
+
+ Means
+    F1                 0.000      0.000    999.000    999.000
+    F2                 0.000      0.000    999.000    999.000
+
+ Intercepts
+    X1                 0.897      0.031     28.753      0.000
+    X2                 0.841      0.031     27.436      0.000
+    X3                 1.017      0.031     33.327      0.000
+    X4                 0.934      0.031     30.579      0.000
+    X5                 0.794      0.028     27.901      0.000
+    X6                 0.867      0.031     28.217      0.000
+
+ Variances
+    F1                 1.000      0.000    999.000    999.000
+    F2                 1.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1                 0.360      0.027     13.104      0.000
+    X2                 0.384      0.019     19.706      0.000
+    X3                 0.524      0.017     30.218      0.000
+    X4                 0.316      0.022     14.255      0.000
+    X5                 0.436      0.020     22.228      0.000
+    X6                 0.715      0.019     37.210      0.000
+
+
+STDY Standardization
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+Group GROUP1
+
+ F1       BY
+    X1                 0.825      0.015     56.512      0.000
+    X2                 0.668      0.017     39.551      0.000
+    X3                 0.509      0.015     33.225      0.000
+    X4                 0.109      0.010     10.984      0.000
+    X5                 0.139      0.013     10.336      0.000
+    X6                -0.067      0.017     -3.895      0.000
+
+ F2       BY
+    X1                -0.012      0.008     -1.584      0.113
+    X2                 0.260      0.016     15.901      0.000
+    X3                 0.332      0.016     21.262      0.000
+    X4                 0.779      0.014     57.527      0.000
+    X5                 0.682      0.014     47.101      0.000
+    X6                 0.564      0.016     34.871      0.000
+
+ F2       WITH
+    F1                 0.431      0.013     31.996      0.000
+
+ Means
+    F1                 0.000      0.000    999.000    999.000
+    F2                 0.000      0.000    999.000    999.000
+
+ Intercepts
+    X1                 0.480      0.019     25.376      0.000
+    X2                 0.324      0.019     17.346      0.000
+    X3                 0.179      0.018      9.733      0.000
+    X4                 0.480      0.019     25.218      0.000
+    X5                 0.373      0.019     19.894      0.000
+    X6                 0.591      0.019     30.385      0.000
+
+ Variances
+    F1                 1.000      0.000    999.000    999.000
+    F2                 1.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1                 0.328      0.022     14.865      0.000
+    X2                 0.336      0.015     22.532      0.000
+    X3                 0.486      0.014     34.540      0.000
+    X4                 0.308      0.017     17.908      0.000
+    X5                 0.434      0.016     27.007      0.000
+    X6                 0.710      0.015     47.129      0.000
+
+Group GROUP2
+
+ F1       BY
+    X1                 0.804      0.018     44.776      0.000
+    X2                 0.653      0.019     34.799      0.000
+    X3                 0.498      0.018     28.428      0.000
+    X4                 0.108      0.011     10.160      0.000
+    X5                 0.139      0.015      9.520      0.000
+    X6                -0.065      0.016     -3.936      0.000
+
+ F2       BY
+    X1                -0.012      0.008     -1.608      0.108
+    X2                 0.257      0.017     14.788      0.000
+    X3                 0.329      0.017     19.568      0.000
+    X4                 0.781      0.016     48.389      0.000
+    X5                 0.689      0.016     42.582      0.000
+    X6                 0.555      0.020     28.319      0.000
+
+ F2       WITH
+    F1                 0.367      0.034     10.827      0.000
+
+ Means
+    F1                 0.000      0.000    999.000    999.000
+    F2                 0.000      0.000    999.000    999.000
+
+ Intercepts
+    X1                 0.897      0.031     28.753      0.000
+    X2                 0.841      0.031     27.436      0.000
+    X3                 1.017      0.031     33.327      0.000
+    X4                 0.934      0.031     30.579      0.000
+    X5                 0.794      0.028     27.901      0.000
+    X6                 0.867      0.031     28.217      0.000
+
+ Variances
+    F1                 1.000      0.000    999.000    999.000
+    F2                 1.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1                 0.360      0.027     13.104      0.000
+    X2                 0.384      0.019     19.706      0.000
+    X3                 0.524      0.017     30.218      0.000
+    X4                 0.316      0.022     14.255      0.000
+    X5                 0.436      0.020     22.228      0.000
+    X6                 0.715      0.019     37.210      0.000
+
+
+STD Standardization
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+Group GROUP1
+
+ F1       BY
+    X1                 0.884      0.020     44.607      0.000
+    X2                 0.615      0.018     34.526      0.000
+    X3                 0.517      0.018     29.455      0.000
+    X4                 0.125      0.012     10.766      0.000
+    X5                 0.120      0.012     10.156      0.000
+    X6                -0.057      0.014     -3.906      0.000
+
+ F2       BY
+    X1                -0.013      0.008     -1.595      0.111
+    X2                 0.239      0.015     15.516      0.000
+    X3                 0.337      0.016     20.538      0.000
+    X4                 0.893      0.020     43.746      0.000
+    X5                 0.588      0.015     38.000      0.000
+    X6                 0.478      0.016     30.643      0.000
+
+ F2       WITH
+    F1                 0.431      0.013     31.996      0.000
+
+ Means
+    F1                 0.000      0.000    999.000    999.000
+    F2                 0.000      0.000    999.000    999.000
+
+ Intercepts
+    X1                 0.514      0.020     26.328      0.000
+    X2                 0.298      0.017     17.699      0.000
+    X3                 0.182      0.019      9.775      0.000
+    X4                 0.550      0.021     26.279      0.000
+    X5                 0.321      0.016     20.389      0.000
+    X6                 0.501      0.015     32.463      0.000
+
+ Variances
+    F1                 1.000      0.000    999.000    999.000
+    F2                 1.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1                 0.377      0.026     14.709      0.000
+    X2                 0.285      0.013     22.665      0.000
+    X3                 0.502      0.015     32.644      0.000
+    X4                 0.405      0.022     18.420      0.000
+    X5                 0.322      0.012     26.196      0.000
+    X6                 0.510      0.015     34.156      0.000
+
+Group GROUP2
+
+ F1       BY
+    X1                 0.842      0.026     32.662      0.000
+    X2                 0.586      0.020     29.124      0.000
+    X3                 0.493      0.019     25.911      0.000
+    X4                 0.119      0.012     10.237      0.000
+    X5                 0.114      0.012      9.570      0.000
+    X6                -0.054      0.014     -3.942      0.000
+
+ F2       BY
+    X1                -0.013      0.008     -1.609      0.108
+    X2                 0.231      0.016     14.680      0.000
+    X3                 0.326      0.017     19.068      0.000
+    X4                 0.862      0.025     34.866      0.000
+    X5                 0.567      0.018     31.951      0.000
+    X6                 0.461      0.018     25.491      0.000
+
+ F2       WITH
+    F1                 0.367      0.034     10.827      0.000
+
+ Means
+    F1                 0.000      0.000    999.000    999.000
+    F2                 0.000      0.000    999.000    999.000
+
+ Intercepts
+    X1                 0.940      0.027     34.621      0.000
+    X2                 0.754      0.023     32.702      0.000
+    X3                 1.007      0.026     39.440      0.000
+    X4                 1.031      0.028     36.204      0.000
+    X5                 0.654      0.021     30.829      0.000
+    X6                 0.721      0.022     33.361      0.000
+
+ Variances
+    F1                 1.000      0.000    999.000    999.000
+    F2                 1.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1                 0.395      0.030     12.999      0.000
+    X2                 0.309      0.018     17.593      0.000
+    X3                 0.514      0.022     23.554      0.000
+    X4                 0.385      0.028     13.679      0.000
+    X5                 0.295      0.015     19.778      0.000
+    X6                 0.494      0.022     21.993      0.000
+
+
+R-SQUARE
+
+Group GROUP1
+
+    Observed                                        Two-Tailed
+    Variable        Estimate       S.E.  Est./S.E.    P-Value
+
+    X1                 0.672      0.022     30.403      0.000
+    X2                 0.664      0.015     44.448      0.000
+    X3                 0.514      0.014     36.588      0.000
+    X4                 0.692      0.017     40.195      0.000
+    X5                 0.566      0.016     35.279      0.000
+    X6                 0.290      0.015     19.262      0.000
+
+Group GROUP2
+
+    Observed                                        Two-Tailed
+    Variable        Estimate       S.E.  Est./S.E.    P-Value
+
+    X1                 0.640      0.027     23.286      0.000
+    X2                 0.616      0.019     31.598      0.000
+    X3                 0.476      0.017     27.442      0.000
+    X4                 0.684      0.022     30.817      0.000
+    X5                 0.564      0.020     28.740      0.000
+    X6                 0.285      0.019     14.856      0.000
+
+
+QUALITY OF NUMERICAL RESULTS
+
+     Condition Number for the Information Matrix              0.126E-01
+       (ratio of smallest to largest eigenvalue)
+
+
+     Beginning Time:  01:47:22
+        Ending Time:  01:47:22
+       Elapsed Time:  00:00:00
+
+
+
+MUTHEN & MUTHEN
+3463 Stoner Ave.
+Los Angeles, CA  90066
+
+Tel: (310) 391-9971
+Fax: (310) 391-8971
+Web: www.StatModel.com
+Support: Support@StatModel.com
+
+Copyright (c) 1998-2019 Muthen & Muthen
