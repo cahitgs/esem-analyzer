@@ -122,7 +122,7 @@ node test/docx.test.mjs         # Word/.docx export        (15)
 node test/aids.test.mjs         # convergence aids         (36)
 node test/runscripts.test.mjs   # auto-mode run scripts    (18)
 node test/mginv.test.mjs        # MG bifactor-ESEM invariance (26)
-node test/catinv.test.mjs       # categorical WLSMV invariance + DIFFTEST, ESEM + bifactor-ESEM chains (94)
+node test/catinv.test.mjs       # categorical WLSMV invariance + DIFFTEST, ESEM + bifactor-ESEM chains (97)
 node test/invorder.test.mjs     # invariance step order, unestimated outputs (MG + longitudinal), total-sample models, ID columns, Time-2 pairing incl. an 18 000-file name sweep (138)
 ```
 

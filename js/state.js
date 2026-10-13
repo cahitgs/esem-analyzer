@@ -462,6 +462,9 @@ export function validateSpec(spec) {
     if (catItems.length && catItems.length < spec.items.length) {
       warnings.push(`Only ${catItems.length} of ${spec.items.length} items are flagged categorical — the invariance sequence assumes one scale type. Flag all items categorical for the thresholds-based WLSMV chain, or none for the intercepts-based chain.`);
     } else if (catItems.length === spec.items.length && spec.items.length > 0) {
+      // the thresholds chain is written with PARAMETERIZATION = THETA and the DIFFTEST handshake, which Mplus
+      // provides for the weighted least squares estimators only — refuse rather than emit syntax Mplus rejects
+      if (!/MV$/i.test(spec.estimator || '')) errors.push(`The thresholds-based invariance sequence for categorical items uses PARAMETERIZATION = THETA and DIFFTEST, which Mplus offers for WLSMV, not ${spec.estimator}. Switch the estimator to WLSMV, or unflag the items to run the intercepts-based chain.`);
       warnings.push('Categorical invariance: Δχ² comes from Mplus DIFFTEST — run the generated models in order, in the same folder, so each step finds the previous step\'s Inv_diff_*.dat (and BifactorInv_diff_*.dat) file.');
       // Morin's thresholds identification needs one referent item with ≥ 3 categories per factor (and one
       // more for the G factor of the bifactor chain); without it the configural/metric models are not identified.

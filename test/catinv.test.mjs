@@ -214,5 +214,20 @@ ok('table: latentmean Δχ²=76.43* (p<.05 star)', /<td>76.43\*<\/td><td>3<\/td>
   ok('table: broken chain → dash + run-in-order note', /Missing Δχ² values/.test(h2));
 }
 
+{
+  // MLR + an all-categorical item set + grouping: the THETA/DIFFTEST chain is refused (Mplus rejects THETA under MLR)
+  const names = ['id', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'g'];
+  const rows = Array.from({ length: 300 }, (_, r) => [r + 1, ...Array.from({ length: 6 }, (_, i) => 1 + ((r + i) % 5)), 1 + (r % 2)]);
+  const mlr = createModelSpec({ fileName: 'c.dat', delimiter: 'whitespace', hasHeader: true, nCols: 8, nRows: 300, varNames: names, categorical: ['x1', 'x2', 'x3', 'x4', 'x5', 'x6'], missingCode: null, _matrix: rows });
+  setItems(mlr, ['x1', 'x2', 'x3', 'x4', 'x5', 'x6']); setFactorCount(mlr, 2);
+  mlr.groups.enabled = true; mlr.groups.variable = 'g'; mlr.groups.codes = [{ code: 1, label: 'g1' }, { code: 2, label: 'g2' }];
+  mlr.estimator = 'MLR';
+  ok('validateSpec: categorical chain under MLR → error naming THETA/DIFFTEST and WLSMV', /PARAMETERIZATION = THETA and DIFFTEST.*not MLR.*Switch the estimator to WLSMV/.test(validateSpec(mlr).errors.join(' | ')), validateSpec(mlr).errors);
+  mlr.estimator = 'WLSMV';
+  ok('validateSpec: the same spec under WLSMV has no estimator error', !/THETA and DIFFTEST/.test(validateSpec(mlr).errors.join(' | ')), validateSpec(mlr).errors);
+  mlr.groups.enabled = false; mlr.estimator = 'MLR';
+  ok('validateSpec: MLR with categorical items and no grouping is allowed (single-group models)', !/THETA and DIFFTEST/.test(validateSpec(mlr).errors.join(' | ')), validateSpec(mlr).errors);
+}
+
 console.log(`\ncatinv.test: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
