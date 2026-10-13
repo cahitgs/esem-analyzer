@@ -9,7 +9,7 @@ import { mountModelBuilder } from './model-builder.js';
 import { buildInp, requestedModels } from './syntax-generator.js';
 import { parseOut } from './out-parser.js';
 import { parseSvalues, suggestReferents, buildEwcInp, fixedCrossCount } from './ewc.js';
-import { renderFitTable, renderLoadingsTable, renderProse, renderInvarianceTable, renderInvarianceProse, sortInvarianceModels } from './apa-render.js';
+import { renderFitTable, renderLoadingsTable, renderProse, renderInvarianceTable, renderInvarianceProse, sortInvarianceModels, noFitReason } from './apa-render.js';
 import { copyResultsToWord, exportDocx, zipInputs, buildDocxBlob, buildZipBlob } from './docx-export.js';
 import { renderAutoRunCard, autoRunActive } from './autorun-ui.js';
 import { runner } from './runner.js';
@@ -259,7 +259,9 @@ function renderRunRows(dyn, models) {
     const parsed = appState.parsed.find((x) => x.fileName === outName && x.runId === run?.id);
     let st = 'idle', label = 'Not run yet';
     if (j) { st = j.status; label = JOB_LABEL[j.status] || j.status; if (j.status === 'running') running = j; }
-    if (j && j.status === 'done' && parsed && !parsed.parsed.converged) { st = 'error'; label = 'Did not converge'; }
+    // same verdict as the Results list and the tables: a finished run without fit statistics is a failed run
+    const reason = j && j.status === 'done' && parsed ? noFitReason(parsed.parsed) : null;
+    if (reason) { st = 'error'; label = `Not estimated: ${reason}`; }
     const acts = [];
     if (j && (j.status === 'running' || j.status === 'queued')) acts.push(btn('', { size: 'btn-sm', kind: 'btn-danger btn-icon', icon: 'stop', title: 'Stop', onclick: () => runner.cancel(j.id).catch((e) => toast(e.message, 'err')) }));
     else acts.push(btn('', { size: 'btn-sm', kind: 'btn-tonal btn-icon', icon: 'play', title: j ? 'Run again' : 'Run this model', onclick: () => startRun([m], { reuse: true }) }));
@@ -290,7 +292,16 @@ function renderSyntaxBar() {
   const hasData = !!(appState.spec.data._matrix && appState.spec.data._matrix.length);
   let info, tone;
   if (active) { info = `Mplus is running · ${done} of ${jobs.length} finished`; tone = 'wait'; }
-  else if (jobs.length) { info = failed ? `${done} finished · ${failed} failed — open the .out to see why` : `${done} output${done === 1 ? '' : 's'} written into the manuscript`; tone = failed ? 'warn' : 'ok'; }
+  else if (jobs.length) {
+    // runs that Mplus rejected (job error) and runs that ended without fit statistics (no convergence,
+    // failed rotation, χ² not computed) are both worth a warning here, not just in the tables
+    const nofit = appState.parsed.filter((m) => m.runId === run.id && noFitReason(m.parsed)).length; // this run's outputs only
+    const parts = [`${done} finished`];
+    if (failed) parts.push(`${failed} failed — open the .out to see why`);
+    if (nofit) parts.push(`${nofit} without fit statistics — shown as "Not estimated" in Results`);
+    info = failed || nofit ? parts.join(' · ') : `${done} output${done === 1 ? '' : 's'} written into the manuscript`;
+    tone = failed || nofit ? 'warn' : 'ok';
+  }
   else { info = `${models.length} input ${models.length === 1 ? 'file' : 'files'} ready · ${runner.ok() ? (hasData ? 'Mplus is ready on this computer' : 'load the data again to run from here') : hasData ? 'data file included' : 'data file not available for export'}`; tone = runner.ok() && !hasData ? 'warn' : 'ok'; }
   host.replaceChildren(stepBar({
     back: { label: 'Back', onclick: () => goStep('model') },
@@ -462,7 +473,8 @@ function renderResultsStep() {
 function importOutText(text, fileName, extra = {}) {
   const p = parseOut(text);
   appState.parsed.push({ label: deriveLabel(p, fileName), parsed: p, fileName, raw: text, ...extra });
-  if (!p.converged) toast(`${fileName}: model may not have converged`, 'err');
+  const reason = noFitReason(p);
+  if (reason) toast(`${fileName}: ${reason} — no fit statistics`, 'err');
 }
 
 async function addOutFiles(fileList) {
@@ -471,6 +483,14 @@ async function addOutFiles(fileList) {
     catch (err) { toast(`${f.name}: ${err.message}`, 'err'); }
   }
   renderResultsOutput();
+}
+
+// Row label for a parsed output: the model/step name plus, when it matters, why the output is unusable
+// (no fit statistics — the red dot) or the first note the parser collected about the output (otherwise invisible).
+function outRowLabel(m) {
+  const reason = noFitReason(m.parsed);
+  if (reason) return `${m.label} · not estimated: ${reason}`;
+  return m.parsed.warnings?.length ? `${m.label} · ${m.parsed.warnings[0]}` : m.label;
 }
 
 function deriveLabel(p, fileName) {
@@ -501,7 +521,7 @@ const exportLabels = () => (appState.parsed[0] ? factorLabelsFor(appState.parsed
 function openOutSheet(idx) {
   sheet.open({
     title: 'output',
-    files: () => appState.parsed.map((m, i) => ({ key: `${i}:${m.fileName}`, name: m.fileName, label: m.label, text: m.raw, kind: 'out', dot: m.parsed.converged ? 'ok' : 'bad' })),
+    files: () => appState.parsed.map((m, i) => ({ key: `${i}:${m.fileName}`, name: m.fileName, label: m.label, text: m.raw, kind: 'out', dot: noFitReason(m.parsed) ? 'bad' : 'ok' })),
     active: `${idx}:${appState.parsed[idx]?.fileName}`,
     tools: (f) => [btn('.out', { size: 'btn-sm', icon: 'download', onclick: () => downloadText(f.text, f.name, 'text/plain') })],
   });
@@ -512,7 +532,7 @@ function renderOutList() {
   list.innerHTML = '';
   appState.parsed.forEach((m, i) => {
     list.append(el('div', { class: 'frow-wrap' }, [
-      frow(m.fileName, `${m.label}${m.parsed.converged ? '' : ' · may not have converged'}`, () => openOutSheet(i), { dot: m.parsed.converged ? 'ok' : 'bad', icon: 'file' }),
+      frow(m.fileName, outRowLabel(m), () => openOutSheet(i), { dot: noFitReason(m.parsed) ? 'bad' : 'ok', icon: 'file' }),
       el('button', { type: 'button', class: 'btn btn-sm btn-icon btn-ghost', 'aria-label': `remove ${m.fileName}`, 'data-tip': 'Remove from the manuscript', onclick: () => { appState.parsed.splice(i, 1); renderResultsOutput(); } }, iconEl('x', 16)),
     ]));
   });

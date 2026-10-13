@@ -90,7 +90,7 @@ export function renderFitTable(models, { deltaMode = 'consecutive', caption = 'G
     }
     rows += `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
   });
-  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'}. CFI = comparative fit index; TLI = Tucker–Lewis index; RMSEA = root mean square error of approximation; ${fitCol} = ${useWrmr ? 'weighted' : 'standardized'} root mean square residual.${useWrmr ? ' For the WLSMV estimator, χ² differences require the DIFFTEST option; compare models via ΔCFI/ΔTLI/ΔRMSEA.' : ' Δχ²(s) = Satorra–Bentler scaled χ² difference for the MLR estimator.'} * <i>p</i> &lt; .05.</p>`;
+  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'}. CFI = comparative fit index; TLI = Tucker–Lewis index; RMSEA = root mean square error of approximation; ${fitCol} = ${useWrmr ? 'weighted' : 'standardized'} root mean square residual.${useWrmr ? ' For the WLSMV estimator, χ² differences require the DIFFTEST option; compare models via ΔCFI/ΔTLI/ΔRMSEA.' : ' Δχ²(s) = Satorra–Bentler scaled χ² difference for the MLR estimator.'}${unestimatedFitNote(models, { html: true })} * <i>p</i> &lt; .05.</p>`;
   return `<table class="apa-table"><caption><b>Table.</b> ${caption}</caption>`
     + `<thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${note}`;
 }
@@ -145,7 +145,16 @@ export function noFitReason(p) {
   if (p.rotationFailed) return 'rotation did not converge';
   if (p.chiSquareComputed === false) return 'χ² could not be computed';
   if (p.seComputed === false) return 'standard errors could not be computed';
+  // estimated, but only a loglikelihood-based fit exists (e.g. MLR with categorical indicators: Mplus
+  // reports loglikelihood/AIC/BIC and no χ²-based indices) — not a failure
+  if (p.fit?.logLik != null) return null;
   return 'no fit statistics reported';
+}
+/** Estimated without χ²-based fit indices (loglikelihood only). */
+export function chiSquareFree(p) { return noFitReason(p) == null && p?.fit?.chi2 == null; }
+/** The sentence for such a model (shared by the manuscript and the Word/.docx export). */
+export function noChiSquareSentence(label, f) {
+  return `The ${label} model converged (log-likelihood = ${f2(f.logLik)}, AIC = ${f2(f.aic)}, BIC = ${f2(f.bic)}), but Mplus reports no χ²-based fit indices for it (as with MLR and categorical indicators), so CFI, TLI and RMSEA are not available.`;
 }
 /** Rows of an invariance table: sequence order, each model's nearest ESTIMATED predecessor and the decision
  *  against it. A model whose .out has no fit statistics keeps its place but is marked unestimated and skipped
@@ -164,11 +173,22 @@ export function invarianceSeries(models) {
   }
   return rows;
 }
+/** Fit-table note suffix naming the models without fit statistics and the loglikelihood-only ones ('' when
+ *  every model has χ²-based indices). html → labels escaped for innerHTML; plain text for the .docx path. */
+export function unestimatedFitNote(models, { html = false } = {}) {
+  const lbl = (m) => (html ? esc(m.label) : m.label);
+  const bad = models.filter((m) => noFitReason(m.parsed));
+  const llOnly = models.filter((m) => chiSquareFree(m.parsed));
+  let s = '';
+  if (bad.length) s += ` Not estimated: Mplus produced no fit statistics for ${joinList(bad.map((m) => `${lbl(m)} (${noFitReason(m.parsed)})`))} — see the .out.`;
+  if (llOnly.length) s += ` ${joinList(llOnly.map(lbl))}: Mplus reports no χ²-based fit indices for this model (loglikelihood-based estimation, e.g. MLR with categorical indicators); CFI, TLI and RMSEA are unavailable.`;
+  return s;
+}
 /** Note sentence for unestimated rows ('' when every model has fit statistics). */
-export function unestimatedNote(rows) {
+export function unestimatedNote(rows, { html = false } = {}) {
   const bad = rows.filter((r) => !r.estimated);
   if (!bad.length) return '';
-  return ` Not estimated: Mplus produced no fit statistics for ${joinList(bad.map((r) => `${r.m.label} (${r.reason})`))} — see the .out; these rows are excluded from the comparisons, and each Δ compares with the nearest estimated model above.`;
+  return ` Not estimated: Mplus produced no fit statistics for ${joinList(bad.map((r) => `${html ? esc(r.m.label) : r.m.label} (${r.reason})`))} — see the .out; these rows are excluded from the comparisons, and each Δ compares with the nearest estimated model above.`;
 }
 
 export function renderInvarianceTable(models, { caption, longitudinal = false } = {}) {
@@ -204,7 +224,7 @@ export function renderInvarianceTable(models, { caption, longitudinal = false } 
   const dchiNote = wlsmv
     ? `Δχ² = WLSMV difference test (Mplus DIFFTEST) against the preceding model; WLSMV χ² values cannot be differenced directly.${missingDiff ? ' Missing Δχ² values: run the generated models in order, in one folder, so each step finds the previous step’s DIFFTEST file.' : ''}`
     : 'Δχ²(s) = Satorra–Bentler scaled difference.';
-  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} ${across}. Models are ordered from least to most constrained; each Δ compares with the preceding model. Invariance is supported when ΔCFI ≥ −.010, ΔTLI ≥ −.010, and ΔRMSEA ≤ .015 (Chen, 2007). ${dchiNote}${unestimatedNote(series)} * <i>p</i> &lt; .05.</p>`;
+  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} ${across}. Models are ordered from least to most constrained; each Δ compares with the preceding model. Invariance is supported when ΔCFI ≥ −.010, ΔTLI ≥ −.010, and ΔRMSEA ≤ .015 (Chen, 2007). ${dchiNote}${unestimatedNote(series, { html: true })} * <i>p</i> &lt; .05.</p>`;
   return `<table class="apa-table"><caption><b>Table.</b> ${caption}</caption><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${note}`;
 }
 
@@ -342,11 +362,15 @@ function corrLookup(parsed) {
 export function renderProse(models, { factorLabels = {} } = {}) {
   const paras = [];
   for (const m of models) {
+    const reason = noFitReason(m.parsed);
+    if (reason) { paras.push(`The ${esc(m.label)} model could not be estimated (${reason}); inspect its Mplus output before interpreting any of its estimates.`); continue; }
     const f = m.parsed.fit;
+    if (f.chi2 == null) { paras.push(`${noChiSquareSentence(esc(m.label), f)} ${loadingsSentence(m.parsed)}`); continue; }
     const v = verdict(f);
     paras.push(`The ${esc(m.label)} model provided ${v} fit to the data, <span class="stat">χ²</span>(${f.df}) = ${f2(f.chi2)}, <span class="stat">p</span> ${apaP(f.p)}, CFI = ${f3(f.cfi)}, TLI = ${f3(f.tli)}, RMSEA = ${f3(f.rmsea)} [90% CI ${f3(f.rmseaLo)}, ${f3(f.rmseaHi)}], SRMR = ${f3(f.srmr)}. ${loadingsSentence(m.parsed)}`);
   }
-  const cmp = models.length >= 2 ? comparisonSentence(models) : '';
+  const estimated = models.filter((m) => !noFitReason(m.parsed));
+  const cmp = estimated.length >= 2 ? comparisonSentence(estimated) : '';
   if (cmp) paras.push(cmp);
   return paras.map((p) => `<p class="apa-prose">${p}</p>`).join('');
 }
@@ -369,7 +393,8 @@ function comparisonSentence(models) {
   const ra = corrMean(a), rb = corrMean(b);
   if (ra == null || rb == null) return '';
   const dir = rb < ra ? 'lower' : 'higher';
-  return `<p class="apa-prose">Relative to the ${esc(models[0].label)} solution (mean |r| = ${f3(ra)}), factor correlations were ${dir} in the ${esc(models[models.length - 1].label)} solution (mean |r| = ${f3(rb)}), consistent with the expected effect of freely estimating cross-loadings.</p>`;
+  // bare sentence: renderProse wraps every paragraph itself
+  return `Relative to the ${esc(models[0].label)} solution (mean |r| = ${f3(ra)}), factor correlations were ${dir} in the ${esc(models[models.length - 1].label)} solution (mean |r| = ${f3(rb)}), consistent with the expected effect of freely estimating cross-loadings.`;
 }
 
 function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }

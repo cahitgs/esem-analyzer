@@ -3,7 +3,7 @@
 //   exportDocx(models)         → a real .docx via the `docx` UMD global
 //   zipInputs(files)           → bundle generated .inp files via the `JSZip` UMD global
 import { apaNum, apaP, toast, downloadBlob } from './ui.js';
-import { sbChiSqDiff, buildLoadingsModel, invarianceSeries, sortInvarianceModels, invarianceProseText, unestimatedNote } from './apa-render.js';
+import { sbChiSqDiff, buildLoadingsModel, invarianceSeries, sortInvarianceModels, invarianceProseText, unestimatedNote, noFitReason, unestimatedFitNote, noChiSquareSentence } from './apa-render.js';
 
 // Sequences are ordered by invariance step (configural → … → latent means), never by df: an output without
 // fit statistics has no df and used to be sorted to the top of its table.
@@ -86,8 +86,8 @@ function fitRows(models) {
 function fitNote(models, fr) {
   const n = `N = ${models[0]?.parsed.nObs ?? '—'}.`;
   return fr.useWrmr
-    ? `${n} WRMR = weighted root mean square residual. For the WLSMV estimator, χ² differences require the Mplus DIFFTEST option; compare models via ΔCFI/ΔTLI/ΔRMSEA.`
-    : `${n} Δχ²(s) = Satorra–Bentler scaled difference (MLR). * p < .05.`;
+    ? `${n} WRMR = weighted root mean square residual. For the WLSMV estimator, χ² differences require the Mplus DIFFTEST option; compare models via ΔCFI/ΔTLI/ΔRMSEA.${unestimatedFitNote(models)}`
+    : `${n} Δχ²(s) = Satorra–Bentler scaled difference (MLR).${unestimatedFitNote(models)} * p < .05.`;
 }
 function signed(x) { return (x < 0 ? '−' : '+') + apaNum(Math.abs(x), 3); }
 
@@ -189,7 +189,10 @@ function verdict(f) {
 function proseText(models) {
   const out = [];
   for (const m of models) {
+    const reason = noFitReason(m.parsed);
+    if (reason) { out.push(`The ${m.label} model could not be estimated (${reason}); inspect its Mplus output before interpreting any of its estimates.`); continue; }
     const f = m.parsed.fit;
+    if (f.chi2 == null) { out.push(noChiSquareSentence(m.label, f)); continue; }
     const targets = m.parsed.items.map((it) => Math.abs(m.parsed.loadings[m.parsed.primaryFactor[it]]?.[it]?.est)).filter((v) => v != null && !Number.isNaN(v));
     const omegas = Object.values(m.parsed.omega).filter((x) => x != null);
     let s = `The ${m.label} model provided ${verdict(f)} fit to the data, χ²(${f.df}) = ${f2(f.chi2)}, p ${apaP(f.p)}, CFI = ${f3(f.cfi)}, TLI = ${f3(f.tli)}, RMSEA = ${f3(f.rmsea)} [90% CI ${f3(f.rmseaLo)}, ${f3(f.rmseaHi)}], SRMR = ${f3(f.srmr)}.`;

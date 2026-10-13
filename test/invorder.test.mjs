@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parseOut } from '../js/out-parser.js';
-import { sortInvarianceModels, invarianceSeries, renderInvarianceTable, renderInvarianceProse, noFitReason } from '../js/apa-render.js';
+import { sortInvarianceModels, invarianceSeries, renderInvarianceTable, renderInvarianceProse, noFitReason, renderProse, renderFitTable } from '../js/apa-render.js';
 import { buildWordHtml } from '../js/docx-export.js';
 import { buildInp, requestedModels } from '../js/syntax-generator.js';
 import { createModelSpec, setItems, setFactorCount, validateSpec, looksLikeId } from '../js/state.js';
@@ -83,6 +83,52 @@ ok('default item selection skips the id column', !s2.items.includes('id') && s2.
 setItems(s2, ['id', 'm1', 'm2', 'grup']); setFactorCount(s2, 1);
 const w = validateSpec(s2).warnings.join(' | ');
 ok('validateSpec warns about the id item', /^id looks like a case identifier/.test(w) || / id looks like a case identifier/.test(w), w);
+
+console.log('\n— longitudinal sequences: same order rule, same unestimated handling —');
+const lsteps = ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'];
+const lfx = Object.fromEntries(lsteps.map((s) => [s, parseOut(fx(`long_esem_${s}.out`))]));
+const larrival = ['varcov', 'latentmean', 'metric', 'configural', 'strict', 'scalar'].map((s) => ({ label: lfx[s].invStep, parsed: lfx[s] }));
+ok('longitudinal titles carry the step', larrival.every((m) => m.parsed.invKind === 'longitudinal' && m.parsed.invStep), larrival.map((m) => m.parsed.invStep));
+ok('sorted: configural → … → latent means', sortInvarianceModels(larrival).map((m) => m.label).join(' | ') === LABELS.join(' | '), sortInvarianceModels(larrival).map((m) => m.label));
+const lh = renderInvarianceTable(larrival, { longitudinal: true });
+ok('longitudinal table: Configural first, "two time points" note', /<tbody><tr><td>Configural<\/td>/.test(lh) && /across two time points/.test(lh));
+// a step whose Mplus run did not converge (fit stripped, converged=false) keeps its place and is skipped
+const broken = larrival.map((m) => (m.label === 'Scalar (intercepts)' ? { label: m.label, parsed: { ...m.parsed, fit: {}, converged: false } } : m));
+const ls = invarianceSeries(broken);
+ok('non-converged scalar: 3rd row, Not estimated, reason "did not converge"', ls[2].m.label === 'Scalar (intercepts)' && !ls[2].estimated && ls[2].reason === 'did not converge', ls[2]);
+ok('strict then compares with metric', ls[3].prev?.label === 'Metric (loadings)' && ls[3].dec.text !== '—');
+const lw = buildWordHtml(broken);
+ok('Word export (longitudinal): Configural first, Not estimated row present', lw.indexOf('Configural') < lw.indexOf('Scalar (intercepts)') && /Not estimated/.test(lw));
+
+console.log('\n— single-group model without fit statistics —');
+const bcfa = { label: 'Bifactor-CFA', parsed: parseOut(fx('bifactor_cfa.out')) };
+const okEsem = { label: 'ESEM', parsed: parseOut(fx('esem_geomin.out')) };
+ok('fixture: converged but χ² not computed', bcfa.parsed.converged && noFitReason(bcfa.parsed) === 'χ² could not be computed', noFitReason(bcfa.parsed));
+const pr = renderProse([okEsem, bcfa]);
+ok('prose: unestimated model named with its reason, no "undefined"', /Bifactor-CFA model could not be estimated \(χ² could not be computed\)/.test(pr) && !/undefined/.test(pr), pr);
+ok('prose: the estimated model keeps its fit sentence', /ESEM model provided/.test(pr));
+const ft = renderFitTable([okEsem, bcfa]);
+ok('fit table: dashes for the unestimated row + note with the reason', /<td>Bifactor-CFA<\/td><td>—<\/td>/.test(ft) && /Not estimated: Mplus produced no fit statistics for Bifactor-CFA \(χ² could not be computed\)/.test(ft));
+const wsg = buildWordHtml([okEsem, bcfa]);
+ok('Word export: same sentence and note, no "undefined"', /could not be estimated \(χ² could not be computed\)/.test(wsg) && /Not estimated: Mplus produced no fit statistics/.test(wsg) && !/undefined/.test(wsg));
+
+console.log('\n— comparison sentence, loglikelihood-only outputs, remaining reasons —');
+const cfa2 = { label: 'CFA', parsed: parseOut(fx('cfa_2f.out')) };
+const pr3 = renderProse([cfa2, okEsem, bcfa]);
+ok('comparison sentence uses the estimated models only', /Relative to the CFA solution/.test(pr3) && /in the ESEM solution/.test(pr3) && !/in the Bifactor-CFA solution/.test(pr3), pr3.slice(-300));
+ok('comparison paragraph is not double-wrapped', !/<p class="apa-prose"><p class="apa-prose">/.test(pr3) && !/<\/p><\/p>/.test(pr3));
+const seOnly = { label: 'SE-only', parsed: { ...okEsem.parsed, fit: {}, seComputed: false } };
+ok('reason: standard errors could not be computed', noFitReason(seOnly.parsed) === 'standard errors could not be computed' && /could not be estimated \(standard errors could not be computed\)/.test(renderProse([seOnly])));
+const bare = { label: 'Bare', parsed: { ...okEsem.parsed, fit: {} } };
+ok('reason fallback: no fit statistics reported', noFitReason(bare.parsed) === 'no fit statistics reported');
+const llOnly = { label: 'CFA (MLR, categorical)', parsed: { ...okEsem.parsed, fit: { logLik: -1234.5, aic: 2500.1, bic: 2600.2 } } };
+ok('loglikelihood-only output counts as estimated', noFitReason(llOnly.parsed) === null);
+const prLL = renderProse([llOnly]);
+ok('prose: loglikelihood-only sentence, no "could not be estimated", no undefined', /converged \(log-likelihood = [-−]?1234\.50/.test(prLL) && !/could not be estimated/.test(prLL) && !/undefined/.test(prLL), prLL);
+ok('fit-table note explains the missing χ² indices', /no χ²-based fit indices/.test(renderFitTable([okEsem, llOnly])));
+const wLL = buildWordHtml([okEsem, llOnly]);
+ok('Word export: same for a loglikelihood-only output', /converged \(log-likelihood = [-−]?1234\.50/.test(wLL) && /no χ²-based fit indices/.test(wLL) && !/undefined/.test(wLL));
+ok('note escapes a label with < in the HTML path only', /&lt;x&gt;/.test(renderFitTable([{ label: 'A <x>', parsed: bcfa.parsed }])));
 
 console.log(`\ninvorder.test: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
