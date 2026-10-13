@@ -2,7 +2,7 @@
 // syntax preview (opened in the Mplus sheet). Mutates the shared ModelSpec via state.js helpers
 // and re-renders; the paper on the right draws the hypothesized model from the same spec.
 import { el, $, $$, toast } from './ui.js';
-import { setFactorCount, setItems, setWaveItems, toggleTarget, factorIds, validateSpec } from './state.js';
+import { setFactorCount, setItems, setWaveItems, setTime1, toggleTarget, factorIds, validateSpec, guessWaveCounterparts, orderWave2 } from './state.js';
 import { buildInp, requestedModels, INV_SEQUENCE, INV_META } from './syntax-generator.js';
 import { distinctValues } from './data-parse.js';
 import { ctrlHead, ctrlWrap, card, callout, btn, stepBar, sheet } from './shell.js';
@@ -135,13 +135,17 @@ function refresh() {
   const itemBox = $('#mb-items');
   if (itemBox) {
     itemBox.innerHTML = '';
+    // with time on, this card IS the Time-1 picker: Time 2 follows the change and its columns cannot be picked here
+    const timeOn = SPEC.longitudinal.enabled;
+    const inT2 = new Set(timeOn ? SPEC.longitudinal.waves[1] || [] : []);
     for (const v of SPEC.data.varNames) {
       const on = SPEC.items.includes(v);
+      const disabled = inT2.has(v);
       itemBox.append(el('button', {
-        type: 'button', class: 'chip chip-sm mono', 'aria-pressed': on ? 'true' : 'false',
-        onclick: () => {
+        type: 'button', class: 'chip chip-sm mono', disabled, 'aria-pressed': on ? 'true' : 'false',
+        onclick: disabled ? undefined : () => {
           const next = on ? SPEC.items.filter((x) => x !== v) : SPEC.data.varNames.filter((x) => SPEC.items.includes(x) || x === v);
-          if (next.length >= 1) { setItems(SPEC, next); refresh(); }
+          if (next.length >= 1) { if (timeOn) setTime1(SPEC, next); else setItems(SPEC, next); refresh(); }
         },
       }, v));
     }
@@ -254,7 +258,12 @@ function wavePicker(waveIdx) {
       type: 'button', class: 'chip chip-sm mono', disabled, 'aria-pressed': on ? 'true' : 'false',
       onclick: disabled ? undefined : () => {
         const next = new Set(mine); if (on) next.delete(v); else next.add(v);
-        setWaveItems(SPEC, waveIdx, SPEC.data.varNames.filter((x) => next.has(x)));
+        if (waveIdx === 0) {
+          setTime1(SPEC, SPEC.data.varNames.filter((x) => next.has(x))); // Time 2 follows: the carried key, else by name
+        } else {
+          // Time 2 keeps the by-name pairing order when the selection is the by-name set; else column order
+          setWaveItems(SPEC, 1, orderWave2(SPEC.data, L.waves[0], next, L.waves[1]));
+        }
         refresh();
       },
     }, v));
@@ -269,10 +278,7 @@ function setInvMode(mode) {
     SPEC.longitudinal.enabled = true;
     const L = SPEC.longitudinal;
     if (!L.waves[0]?.length) L.waves[0] = SPEC.items.slice();
-    if (!L.waves[1]?.length) {
-      const used = new Set(L.waves[0]);
-      L.waves[1] = SPEC.data.varNames.filter((v) => !used.has(v)).slice(0, L.waves[0].length);
-    }
+    if (!L.waves[1]?.length) L.waves[1] = guessWaveCounterparts(SPEC.data, L.waves[0]); // by name, else the block after Time 1; never an id column
     setWaveItems(SPEC, 0, L.waves[0]); // bind the Λ grid / factors to the Time-1 indicators
     if (!L.invariance.sequence?.length) L.invariance.sequence = INV_SEQUENCE.slice();
   } else {
