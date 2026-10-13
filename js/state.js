@@ -9,7 +9,7 @@
 export const DEFAULT_OUTPUT_LINE = 'SAMPSTAT STANDARDIZED MODINDICES CINTERVAL RESIDUAL SVALUES TECH1 TECH3 TECH4';
 
 export function createModelSpec(data) {
-  const items = (data?.varNames || []).slice(0, 6); // sensible default selection
+  const items = (data?.varNames || []).filter((v) => !looksLikeId(data, v)).slice(0, 6); // sensible default selection (ID-like columns skipped)
   const spec = {
     data: data || { fileName: null, delimiter: 'whitespace', hasHeader: false, nCols: 0, nRows: 0, varNames: [], categorical: [], missingCode: null },
     items,
@@ -40,6 +40,27 @@ export function createModelSpec(data) {
 }
 
 export function factorIds(spec) { return spec.factors.map((f) => f.id); }
+
+/** True when a column looks like a case identifier: unique consecutive integers over the rows (1…N or alike).
+ *  Such a column must never be an indicator — it has no common variance and its group means differ wildly,
+ *  so the scalar invariance step cannot even converge. Without data, the column name decides. */
+export function looksLikeId(data, name) {
+  const m = data?._matrix;
+  const idx = (data?.varNames || []).indexOf(name);
+  if (!m?.length || idx < 0) return /^(id|no|sira|sıra|kimlik|case|subject|participant|resp(ondent)?)$/i.test(name || '');
+  const seen = new Set();
+  let min = Infinity, max = -Infinity, n = 0;
+  for (const row of m) {
+    const v = row[idx];
+    if (v == null || v === '' || v === '*') continue;
+    const x = Number(String(v).replace(',', '.'));
+    if (Number.isNaN(x) || !Number.isInteger(x) || seen.has(x)) return false;
+    seen.add(x); n++;
+    if (x < min) min = x;
+    if (x > max) max = x;
+  }
+  return n >= 20 && max - min + 1 === n;
+}
 
 /** Resize factors to k, preserving existing labels, and (re)seed the target matrix block-diagonally. */
 export function setFactorCount(spec, k) {
@@ -178,6 +199,8 @@ export function validateSpec(spec) {
     for (const it of spec.items) for (const f of spec.factors) if (spec.target[it]?.[f.id] === false) zeros++;
     if (zeros < needed) warnings.push(`Target rotation usually needs ≥ ${needed} fixed (~0) cross-loadings for ${m} factors; you have ${zeros}.`);
   }
+
+  for (const it of spec.items) if (looksLikeId(spec.data, it)) warnings.push(`${it} looks like a case identifier (unique consecutive integers) — remove it from the items. As an indicator it has no common variance, and the scalar invariance step will not converge.`);
 
   if (spec.estimator === 'WLSMV' && spec.data.categorical.length === 0) warnings.push('WLSMV is selected but no items are flagged categorical.');
 

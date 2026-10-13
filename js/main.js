@@ -9,7 +9,7 @@ import { mountModelBuilder } from './model-builder.js';
 import { buildInp, requestedModels } from './syntax-generator.js';
 import { parseOut } from './out-parser.js';
 import { parseSvalues, suggestReferents, buildEwcInp, fixedCrossCount } from './ewc.js';
-import { renderFitTable, renderLoadingsTable, renderProse, renderInvarianceTable, renderInvarianceProse } from './apa-render.js';
+import { renderFitTable, renderLoadingsTable, renderProse, renderInvarianceTable, renderInvarianceProse, sortInvarianceModels } from './apa-render.js';
 import { copyResultsToWord, exportDocx, zipInputs, buildDocxBlob, buildZipBlob } from './docx-export.js';
 import { renderAutoRunCard, autoRunActive } from './autorun-ui.js';
 import { runner } from './runner.js';
@@ -542,15 +542,16 @@ function renderResultsOutput() {
 
   // Route parsed outputs three ways: longitudinal invariance sequences (single-group, recognized by
   // TITLE), multi-group invariance (nGroups > 1), and plain single-group models.
-  const byDf = (a, b) => (a.parsed.fit.df ?? 0) - (b.parsed.fit.df ?? 0);
+  // Sequences are ordered by invariance step (configural first), never by df: an output without fit
+  // statistics has no df, and sorting by df used to push such rows above the configural baseline.
   const longi = appState.parsed.filter((m) => m.parsed.invKind === 'longitudinal');
-  const multi = appState.parsed.filter((m) => m.parsed.invKind !== 'longitudinal' && (m.parsed.nGroups || 1) > 1).sort(byDf);
+  const multi = sortInvarianceModels(appState.parsed.filter((m) => m.parsed.invKind !== 'longitudinal' && (m.parsed.nGroups || 1) > 1));
   const single = appState.parsed.filter((m) => m.parsed.invKind !== 'longitudinal' && (m.parsed.nGroups || 1) <= 1);
 
   // Longitudinal: one comparison table per measurement model (ESEM vs CFA), least→most constrained.
   const renderLongiBlock = (models, modelLabel) => {
     if (!models.length) return;
-    const set = models.slice().sort(byDf);
+    const set = sortInvarianceModels(models);
     const cap = `Tests of longitudinal measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`;
     const id = `linv-${modelLabel || 'all'}`;
     addHtml(id, `<div class="apa">${renderInvarianceTable(set, { caption: cap, longitudinal: true })}</div>`);

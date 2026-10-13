@@ -101,6 +101,9 @@ export function parseOut(text) {
   if (!res.seComputed) res.warnings.push('Standard errors could not be computed — the model may not be identified.');
   if (!res.chiSquareComputed) res.warnings.push('Robust χ² and fit indices could not be computed for this model.');
   if (/NOT POSITIVE DEFINITE/i.test(text)) res.warnings.push('A covariance matrix was not positive definite — inspect the solution.');
+  // A rotation that fails leaves no fit statistics: Mplus prints the unrotated solution only.
+  res.rotationFailed = /NO CONVERGENCE IN ROTATION ALGORITHM|PROBLEM OCCURRED IN THE ROTATION ALGORITHM/i.test(text);
+  if (res.rotationFailed) res.warnings.push('The rotation algorithm did not converge — Mplus reports the unrotated solution and no fit statistics.');
 
   // ---- title ---- (last non-empty line before SUMMARY OF ANALYSIS)
   const summaryIdx = findLine(lines, /^SUMMARY OF ANALYSIS\s*$/);

@@ -98,7 +98,8 @@ export function renderFitTable(models, { deltaMode = 'consecutive', caption = 'G
 function signed(x, dp) { const s = apaNum(Math.abs(x), dp); return (x < 0 ? '−' : '+') + s; }
 /** "ΔCFI = −.024, ΔTLI = −.037, ΔRMSEA = +.071" — indices without a value are left out. */
 export function deltaText(dec) {
-  return [['ΔCFI', dec.dcfi], ['ΔTLI', dec.dtli], ['ΔRMSEA', dec.drmsea]].filter(([, v]) => v != null).map(([k, v]) => `${k} = ${signed(v, 3)}`).join(', ');
+  const parts = [['ΔCFI', dec.dcfi], ['ΔTLI', dec.dtli], ['ΔRMSEA', dec.drmsea]].filter(([, v]) => v != null).map(([k, v]) => `${k} = ${signed(v, 3)}`);
+  return parts.length ? parts.join(', ') : 'fit statistics unavailable';
 }
 
 // ======================= Measurement-invariance table =======================
@@ -117,17 +118,76 @@ export function invarianceDecision(prev, cur) {
   return { ok, text: dcfi == null ? '—' : (ok ? 'Supported' : 'Not supported'), dcfi, dtli, drmsea };
 }
 
+// ---- step order and estimation status (shared by the on-screen table, the prose and the Word/.docx export) ----
+// The order is the invariance sequence itself (configural → metric → scalar → strict → var/cov → latent
+// means), read from the step the parser takes out of the TITLE (or from the row label). The old rule —
+// sort by df — put every output WITHOUT fit statistics first, so one failed step scrambled the whole table.
+const STEP_PATTERNS = [
+  [0, /configural/i], [1, /metric|weak|loading/i], [2, /scalar|strong|intercept/i],
+  [3, /strict|residual|uniq/i], [5, /mean/i], [4, /var|covar/i],
+];
+/** 0–5 for a recognisable invariance step, else null (df then decides). */
+export function invStepIndex(m) {
+  const key = m.parsed?.invStep || m.label || '';
+  for (const [idx, re] of STEP_PATTERNS) if (re.test(key)) return idx;
+  return null;
+}
+/** The models in sequence order (unknown steps last, then by df, then input order). Input is not mutated. */
+export function sortInvarianceModels(models) {
+  return models.map((m, i) => ({ m, i, k: invStepIndex(m) ?? 99, df: m.parsed?.fit?.df ?? Number.POSITIVE_INFINITY }))
+    .sort((a, b) => (a.k - b.k) || (a.df - b.df) || (a.i - b.i))
+    .map((x) => x.m);
+}
+/** Why an output carries no fit statistics (null when it has them). */
+export function noFitReason(p) {
+  if (p?.fit?.chi2 != null && p?.fit?.df != null) return null;
+  if (!p?.converged) return 'did not converge';
+  if (p.rotationFailed) return 'rotation did not converge';
+  if (p.chiSquareComputed === false) return 'χ² could not be computed';
+  if (p.seComputed === false) return 'standard errors could not be computed';
+  return 'no fit statistics reported';
+}
+/** Rows of an invariance table: sequence order, each model's nearest ESTIMATED predecessor and the decision
+ *  against it. A model whose .out has no fit statistics keeps its place but is marked unestimated and skipped
+ *  by the comparisons, so a failed step can neither scramble the rows nor hide the configural baseline. */
+export function invarianceSeries(models) {
+  const rows = [];
+  let prev = null;
+  for (const m of sortInvarianceModels(models)) {
+    const f = m.parsed.fit || {};
+    const reason = noFitReason(m.parsed);
+    const estimated = reason == null;
+    const dec = estimated ? invarianceDecision(prev ? prev.parsed.fit : null, f)
+      : { ok: null, text: 'Not estimated', dcfi: null, dtli: null, drmsea: null };
+    rows.push({ m, f, estimated, reason, prev, dec });
+    if (estimated) prev = m;
+  }
+  return rows;
+}
+/** Note sentence for unestimated rows ('' when every model has fit statistics). */
+export function unestimatedNote(rows) {
+  const bad = rows.filter((r) => !r.estimated);
+  if (!bad.length) return '';
+  return ` Not estimated: Mplus produced no fit statistics for ${joinList(bad.map((r) => `${r.m.label} (${r.reason})`))} — see the .out; these rows are excluded from the comparisons, and each Δ compares with the nearest estimated model above.`;
+}
+
 export function renderInvarianceTable(models, { caption, longitudinal = false } = {}) {
   if (!caption) caption = longitudinal ? 'Tests of longitudinal measurement invariance' : 'Tests of measurement invariance across groups';
   // WLSMV (categorical) sequences: the χ² values cannot be differenced or SB-scaled — the only
   // valid Δχ² is Mplus's DIFFTEST, which each step's own .out reports against the previous step.
   const wlsmv = models.some((m) => /MV$/i.test(m.parsed.estimator || '') || m.parsed.diffTest);
   const head = ['Model', 'χ²', 'df', 'CFI', 'TLI', 'RMSEA [90% CI]', wlsmv ? 'Δχ²' : 'Δχ²(s)', 'Δdf', 'ΔCFI', 'ΔTLI', 'ΔRMSEA', 'Decision'];
+  const series = invarianceSeries(models);
   let rows = '';
   let missingDiff = false;
-  models.forEach((m, i) => {
-    const f = m.parsed.fit, prev = i ? models[i - 1].parsed.fit : null;
-    const dec = invarianceDecision(prev, f);
+  for (const r of series) {
+    const { m, f, dec } = r;
+    if (!r.estimated) {
+      const cells = [m.label, ...Array(10).fill('—'), '<span style="color:var(--danger);font-weight:600">Not estimated</span>'];
+      rows += `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
+      continue;
+    }
+    const prev = r.prev ? r.prev.parsed.fit : null;
     let dchi = '—', ddf = '—';
     if (prev && wlsmv) {
       const d = m.parsed.diffTest;
@@ -139,35 +199,43 @@ export function renderInvarianceTable(models, { caption, longitudinal = false } 
       dchi, ddf, dec.dcfi != null ? signed(dec.dcfi, 3) : '—', dec.dtli != null ? signed(dec.dtli, 3) : '—', dec.drmsea != null ? signed(dec.drmsea, 3) : '—',
       `<span style="${colour};font-weight:600">${dec.text}</span>`];
     rows += `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
-  });
+  }
   const across = longitudinal ? 'across two time points' : `across ${models[0]?.parsed.nGroups ?? 2} groups`;
   const dchiNote = wlsmv
     ? `Δχ² = WLSMV difference test (Mplus DIFFTEST) against the preceding model; WLSMV χ² values cannot be differenced directly.${missingDiff ? ' Missing Δχ² values: run the generated models in order, in one folder, so each step finds the previous step’s DIFFTEST file.' : ''}`
     : 'Δχ²(s) = Satorra–Bentler scaled difference.';
-  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} ${across}. Models are ordered from least to most constrained; each Δ compares with the preceding model. Invariance is supported when ΔCFI ≥ −.010, ΔTLI ≥ −.010, and ΔRMSEA ≤ .015 (Chen, 2007). ${dchiNote} * <i>p</i> &lt; .05.</p>`;
+  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} ${across}. Models are ordered from least to most constrained; each Δ compares with the preceding model. Invariance is supported when ΔCFI ≥ −.010, ΔTLI ≥ −.010, and ΔRMSEA ≤ .015 (Chen, 2007). ${dchiNote}${unestimatedNote(series)} * <i>p</i> &lt; .05.</p>`;
   return `<table class="apa-table"><caption><b>Table.</b> ${caption}</caption><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${note}`;
 }
 
-export function renderInvarianceProse(models, { longitudinal = false } = {}) {
-  if (models.length < 2) return '';
+/** Plain-text invariance paragraph shared by the manuscript (renderInvarianceProse) and the Word/.docx export. */
+export function invarianceProseText(models, { longitudinal = false } = {}) {
+  const series = invarianceSeries(models);
+  const est = series.filter((r) => r.estimated);
+  const skipped = series.filter((r) => !r.estimated);
   const over = longitudinal ? 'across the two time points' : 'across groups';
+  const skippedSentence = skipped.length
+    ? ` The ${joinList(skipped.map((r) => r.m.label.toLowerCase()))} model${skipped.length > 1 ? 's' : ''} could not be estimated (${joinList([...new Set(skipped.map((r) => r.reason))])}) and ${skipped.length > 1 ? 'were' : 'was'} left out of the comparisons.`
+    : '';
+  if (est.length < 2) return skippedSentence.trim();
   const supported = [], failedAt = [];
-  models.forEach((m, i) => {
-    if (i === 0) { supported.push(m.label); return; }
-    const dec = invarianceDecision(models[i - 1].parsed.fit, m.parsed.fit);
-    if (dec.ok) supported.push(m.label); else failedAt.push({ m, dec });
-  });
-  let s = `Configural invariance provided a baseline against which more constrained models were compared. `;
+  est.forEach((r, i) => { if (i === 0) { supported.push(r.m.label); return; } if (r.dec.ok) supported.push(r.m.label); else failedAt.push(r); });
+  let s = `${est[0].m.label} invariance provided a baseline against which more constrained models were compared. `;
   if (!failedAt.length) {
     const held = joinList(supported.slice(1).map((x) => x.toLowerCase()));
-    s += `All constraints were tenable: ${held} invariance were each supported (ΔCFI ≥ −.010, ΔTLI ≥ −.010, ΔRMSEA ≤ .015), indicating full measurement invariance ${over}.`;
+    s += `All constraints were tenable: ${held} invariance ${supported.length > 2 ? 'were each' : 'was'} supported (ΔCFI ≥ −.010, ΔTLI ≥ −.010, ΔRMSEA ≤ .015), indicating full measurement invariance ${over}.`;
   } else {
     const first = failedAt[0];
     const held = supported.slice(1).map((x) => x.toLowerCase());
     s += held.length ? `${joinList(held)} invariance ${held.length > 1 ? 'were' : 'was'} supported, but ` : '';
     s += `${first.m.label.toLowerCase()} invariance was not supported (${deltaText(first.dec)}), indicating non-invariance at this level. Partial-invariance follow-ups (freeing the most divergent parameters via modification indices) are recommended before comparing ${longitudinal ? 'time points' : 'groups'} further.`;
   }
-  return `<p class="apa-prose">${s}</p>`;
+  return s + skippedSentence;
+}
+
+export function renderInvarianceProse(models, opts = {}) {
+  const s = invarianceProseText(models, opts);
+  return s ? `<p class="apa-prose">${s}</p>` : '';
 }
 
 // ======================= Loadings table =======================

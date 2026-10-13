@@ -29,10 +29,10 @@ spec.groups = { enabled: true, variable: 'gender', codes: [{ code: 1, label: 'me
 
 // ---- requestedModels wiring ----
 const models = requestedModels(spec);
-ok('groups on + besem checked → 12 models (6 inv + 6 binv)', models.length === 12, models.length);
+ok('groups on + besem checked → 3 total-sample models + 6 inv + 6 binv = 15', models.length === 15 && models.slice(0, 3).map((m) => m.key).join() === 'cfa,esem,bifactorEsem', models.map((m) => m.key));
 ok('binv files named BifactorInv_N_step', models.filter((m) => m.key.startsWith('binv:')).every((m, i) => m.file === `BifactorInv_${i + 1}_${INV_SEQUENCE[i]}.inp`), models.map((m) => m.file));
 const specNoB = { ...spec, modelTypes: { ...spec.modelTypes, bifactorEsem: false } };
-ok('besem unchecked → 6 models only', requestedModels(specNoB).length === 6, requestedModels(specNoB).length);
+ok('besem unchecked → cfa + esem + 6 inv = 8 models', requestedModels(specNoB).length === 8, requestedModels(specNoB).length);
 
 // ---- configural ----
 const conf = buildInp(spec, 'binv:configural');

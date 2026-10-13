@@ -79,7 +79,7 @@ function rotationLine(spec) {
   return `ROTATION=GEOMIN(${kind}${fmtEpsilon(spec.rotation.epsilon)});`;
 }
 
-function headerBlocks(spec, { rotation, rotationOverride, iterations, useVars, parameterization, difftestIn } = {}) {
+function headerBlocks(spec, { rotation, rotationOverride, iterations, useVars, parameterization, difftestIn, grouping = false } = {}) {
   // Point at the Mplus-ready .dat (space-delimited, no header) the app exports — the original
   // upload may be a semicolon CSV or carry a header, which Mplus cannot read directly.
   const file = spec.data.mplusFile || spec.data.fileName || 'data.dat';
@@ -96,8 +96,10 @@ function headerBlocks(spec, { rotation, rotationOverride, iterations, useVars, p
   const catUsed = (spec.data.categorical || []).filter((v) => used.includes(v));
   if (catUsed.length) lines.push(catUsed.length === used.length ? 'CATEGORICAL ARE ALL;' : stmt(['CATEGORICAL ARE', ...catUsed]));
   if (spec.data.missingCode != null && spec.data.missingCode !== '') lines.push(`MISSING ARE ALL (${spec.data.missingCode});`);
-  // Longitudinal models are single-group (explicit useVars): never emit a GROUPING line for them.
-  if (!useVars && spec.groups?.enabled && spec.groups.variable) {
+  // Only the multi-group invariance builders ask for a GROUPING line: the measurement models (CFA, ESEM,
+  // bifactor) are estimated on the total sample even when grouping is on, and the longitudinal models are
+  // single-group by construction.
+  if (grouping && spec.groups?.enabled && spec.groups.variable) {
     const codes = spec.groups.codes.map((c) => `${c.code} = ${c.label}`).join(' ');
     lines.push(`GROUPING IS ${spec.groups.variable} (${codes});`);
   }
@@ -322,7 +324,7 @@ function buildInvariance(spec, step) {
 
   // ESEM measurement invariance is iteration-heavy (rotation re-estimated under cross-group
   // constraints); raise the optimizer cap so complex models (many factors/items) still converge.
-  const lines = [...titleLine(`MG invariance - ${INV_META[step].label}`), ...headerBlocks(spec, { rotation: true, iterations: 10000 }), 'MODEL:', ...main];
+  const lines = [...titleLine(`MG invariance - ${INV_META[step].label}`), ...headerBlocks(spec, { rotation: true, iterations: 10000, grouping: true }), 'MODEL:', ...main];
   for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
   lines.push(...outputBlock(spec));
   return lines.join('\n') + '\n';
@@ -404,7 +406,7 @@ function buildInvarianceCategorical(spec, step) {
 
   const lines = [
     ...titleLine(`MG invariance (categorical) - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotation: true, parameterization: 'THETA', difftestIn }),
+    ...headerBlocks(spec, { rotation: true, parameterization: 'THETA', difftestIn, grouping: true }),
     'MODEL:', ...main,
   ];
   for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
@@ -456,7 +458,7 @@ function buildInvarianceBifactorEsem(spec, step) {
   // invariance is the most iteration-hungry model family the app generates (Morin's own setting).
   const lines = [
     ...titleLine(`MG invariance (bifactor-ESEM) - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', iterations: 100000 }),
+    ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', iterations: 100000, grouping: true }),
     'MODEL:', ...main,
   ];
   for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
@@ -513,7 +515,7 @@ function buildInvarianceBifactorEsemCategorical(spec, step) {
 
   const lines = [
     ...titleLine(`MG invariance (bifactor-ESEM) - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', parameterization: 'THETA', iterations: 100000, difftestIn }),
+    ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', parameterization: 'THETA', iterations: 100000, difftestIn, grouping: true }),
     'MODEL:', ...main,
   ];
   for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
@@ -711,14 +713,18 @@ export function requestedModels(spec) {
     }));
     return out;
   }
-  // Measurement-invariance workflow: when grouping is on, generate the invariance sequence(s):
-  // first-order ESEM always (the default measurement model), plus the bifactor-ESEM sequence
-  // when that model type is checked.
+  // The checked measurement models are always generated on the total sample (Morin's Table 1 reports the
+  // total-group CFA/ESEM/bifactor models before the multi-group ones). With grouping on, the invariance
+  // sequence(s) follow them: first-order ESEM always (the default measurement model), plus the
+  // bifactor-ESEM sequence when that model type is checked.
+  const out = [];
+  if (spec.modelTypes.cfa) out.push({ key: 'cfa', label: 'CFA', file: `CFA_${spec.factors.length}f.inp` });
+  if (spec.modelTypes.esem) out.push({ key: 'esem', label: `ESEM (${spec.rotation.type === 'TARGET' ? 'Target' : 'Geomin'})`, file: `ESEM_${spec.rotation.type.toLowerCase()}_${spec.factors.length}f.inp` });
+  if (spec.modelTypes.bifactorCfa) out.push({ key: 'bifactorCfa', label: 'Bifactor-CFA', file: `BifactorCFA_${spec.factors.length}s.inp` });
+  if (spec.modelTypes.bifactorEsem) out.push({ key: 'bifactorEsem', label: 'Bifactor-ESEM', file: `BifactorESEM_${spec.factors.length}s.inp` });
   if (spec.groups?.enabled && spec.groups.variable) {
     const seq = spec.groups.invariance.sequence || INV_SEQUENCE;
-    const out = seq.map((step, i) => ({
-      key: `inv:${step}`, label: INV_META[step].label, file: `Inv_${i + 1}_${step}.inp`, step,
-    }));
+    seq.forEach((step, i) => out.push({ key: `inv:${step}`, label: INV_META[step].label, file: `Inv_${i + 1}_${step}.inp`, step }));
     // The bifactor-ESEM sequence rides along when that model type is checked: continuous items get the
     // intercept chain, categorical items the thresholds/THETA chain (its own BifactorInv_diff_* files).
     if (spec.modelTypes.bifactorEsem) {
@@ -727,13 +733,7 @@ export function requestedModels(spec) {
         file: `BifactorInv_${i + 1}_${step}.inp`, step,
       }));
     }
-    return out;
   }
-  const out = [];
-  if (spec.modelTypes.cfa) out.push({ key: 'cfa', label: 'CFA', file: `CFA_${spec.factors.length}f.inp` });
-  if (spec.modelTypes.esem) out.push({ key: 'esem', label: `ESEM (${spec.rotation.type === 'TARGET' ? 'Target' : 'Geomin'})`, file: `ESEM_${spec.rotation.type.toLowerCase()}_${spec.factors.length}f.inp` });
-  if (spec.modelTypes.bifactorCfa) out.push({ key: 'bifactorCfa', label: 'Bifactor-CFA', file: `BifactorCFA_${spec.factors.length}s.inp` });
-  if (spec.modelTypes.bifactorEsem) out.push({ key: 'bifactorEsem', label: 'Bifactor-ESEM', file: `BifactorESEM_${spec.factors.length}s.inp` });
   return out;
 }
 

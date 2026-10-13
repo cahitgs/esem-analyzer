@@ -123,6 +123,7 @@ node test/aids.test.mjs         # convergence aids         (36)
 node test/runscripts.test.mjs   # auto-mode run scripts    (18)
 node test/mginv.test.mjs        # MG bifactor-ESEM invariance (26)
 node test/catinv.test.mjs       # categorical WLSMV invariance + DIFFTEST, ESEM + bifactor-ESEM chains (94)
+node test/invorder.test.mjs     # invariance step order, unestimated outputs, total-sample models, ID columns (22)
 ```
 
 The two multi-group invariance engines were additionally **cross-validated against De Beer & Morin's

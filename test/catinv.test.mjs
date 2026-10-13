@@ -37,7 +37,7 @@ spec.groups = { enabled: true, variable: 'okul', codes: [{ code: 1, label: 'okul
 // ---- wiring ----
 ok('isCategoricalInvariance: all items flagged → true', isCategoricalInvariance(spec) === true);
 const models = requestedModels(spec);
-ok('bifactor sequence generated for categorical too → 12 models (6 inv + 6 binv)', models.length === 12 && models.slice(0, 6).every((m) => m.key.startsWith('inv:')) && models.slice(6).every((m) => m.key.startsWith('binv:')), models.map((m) => m.key));
+ok('bifactor sequence generated for categorical too → 2 total-sample models + 6 inv + 6 binv', models.length === 14 && models.slice(0, 2).map((m) => m.key).join() === 'esem,bifactorEsem' && models.slice(2, 8).every((m) => m.key.startsWith('inv:')) && models.slice(8).every((m) => m.key.startsWith('binv:')), models.map((m) => m.key));
 const warns = validateSpec(spec).warnings.join(' | ');
 ok('validateSpec: DIFFTEST run-in-order warning', /DIFFTEST/.test(warns), warns);
 ok('validateSpec: no "bifactor not generated" warning any more', !/not generated/.test(warns), warns);

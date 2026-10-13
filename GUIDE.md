@@ -50,8 +50,8 @@ A few load-bearing conventions:
 - **ESEM (Target):** one `BY` line per factor with `~0` on the cross-loadings.
 - **Bifactor-ESEM:** `ROTATION = BI-GEOMIN(ORTHOGONAL .5);` with `G F1-Fk BY <items> (*1);`
 - **Invariance** uses the standardized-factors approach (`F@1`/`[F@0]` freed to `*`/`[*]` from weak
-  invariance on) with alphanumeric equality labels `(i1-i#)`, `(u1-u#)`, `(cov#)`. With grouping on, the
-  app generates the first-order ESEM sequence, plus a parallel **bifactor-ESEM** sequence when that model
+  invariance on) with alphanumeric equality labels `(i1-i#)`, `(u1-u#)`, `(cov#)`. With grouping on, the checked
+  measurement models are still generated on the total sample, followed by the first-order ESEM sequence, plus a parallel **bifactor-ESEM** sequence when that model
   type is checked (orthogonal target rotation, the G factor's variance/mean/covariances handled per step).
 - **Categorical items** (all items flagged on the Data step) switch the multi-group sequence to the
   **WLSMV + `PARAMETERIZATION=THETA`** thresholds chain: configural already equates every item's first

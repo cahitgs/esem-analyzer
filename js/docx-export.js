@@ -3,9 +3,10 @@
 //   exportDocx(models)         → a real .docx via the `docx` UMD global
 //   zipInputs(files)           → bundle generated .inp files via the `JSZip` UMD global
 import { apaNum, apaP, toast, downloadBlob } from './ui.js';
-import { sbChiSqDiff, invarianceDecision, buildLoadingsModel, deltaText } from './apa-render.js';
+import { sbChiSqDiff, buildLoadingsModel, invarianceSeries, sortInvarianceModels, invarianceProseText, unestimatedNote } from './apa-render.js';
 
-const byDf = (a, b) => (a.parsed.fit.df ?? 0) - (b.parsed.fit.df ?? 0);
+// Sequences are ordered by invariance step (configural → … → latent means), never by df: an output without
+// fit statistics has no df and used to be sorted to the top of its table.
 const splitGroups = (models) => {
   const longi = models.filter((m) => m.parsed.invKind === 'longitudinal');
   const rest = models.filter((m) => m.parsed.invKind !== 'longitudinal');
@@ -14,40 +15,35 @@ const splitGroups = (models) => {
   // in each other, so each gets its own df-sorted table — the same split the on-screen Results make.
   const isBesem = (m) => m.parsed.invModel === 'besem' || /bifactor-ESEM/i.test(m.parsed.title || '');
   return {
-    longiEsem: longi.filter((m) => !['cfa', 'besem'].includes(m.parsed.invModel)).sort(byDf),
-    longiCfa: longi.filter((m) => m.parsed.invModel === 'cfa').sort(byDf),
-    longiBesem: longi.filter((m) => m.parsed.invModel === 'besem').sort(byDf),
-    multi: mg.filter((m) => !isBesem(m)).sort(byDf),
-    multiBesem: mg.filter(isBesem).sort(byDf),
+    longiEsem: sortInvarianceModels(longi.filter((m) => !['cfa', 'besem'].includes(m.parsed.invModel))),
+    longiCfa: sortInvarianceModels(longi.filter((m) => m.parsed.invModel === 'cfa')),
+    longiBesem: sortInvarianceModels(longi.filter((m) => m.parsed.invModel === 'besem')),
+    multi: sortInvarianceModels(mg.filter((m) => !isBesem(m))),
+    multiBesem: sortInvarianceModels(mg.filter(isBesem)),
     single: rest.filter((m) => (m.parsed.nGroups || 1) <= 1),
   };
 };
 // Multi-group note string for the invariance table (Word + .docx).
 function mgNote(models) {
-  return `N = ${models[0]?.parsed.nObs ?? '—'} across ${models[0]?.parsed.nGroups ?? 2} groups. Invariance supported when ΔCFI ≥ −.010, ΔTLI ≥ −.010, and ΔRMSEA ≤ .015 (Chen, 2007).`;
+  return `N = ${models[0]?.parsed.nObs ?? '—'} across ${models[0]?.parsed.nGroups ?? 2} groups. Invariance supported when ΔCFI ≥ −.010, ΔTLI ≥ −.010, and ΔRMSEA ≤ .015 (Chen, 2007).${unestimatedNote(invarianceSeries(models))}`;
 }
 
 function invRows(models) {
   const head = ['Model', 'χ²', 'df', 'CFI', 'TLI', 'RMSEA [90% CI]', 'ΔCFI', 'ΔTLI', 'ΔRMSEA', 'Decision'];
-  const body = models.map((m, i) => {
-    const f = m.parsed.fit, dec = invarianceDecision(i ? models[i - 1].parsed.fit : null, f);
-    return [m.label, f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`,
-      dec.dcfi != null ? signed(dec.dcfi) : '—', dec.dtli != null ? signed(dec.dtli) : '—', dec.drmsea != null ? signed(dec.drmsea) : '—', dec.text];
-  });
+  // same rows as the on-screen table: sequence order, unestimated outputs marked and skipped by the comparisons
+  const body = invarianceSeries(models).map(({ m, f, dec, estimated }) => (estimated
+    ? [m.label, f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`,
+      dec.dcfi != null ? signed(dec.dcfi) : '—', dec.dtli != null ? signed(dec.dtli) : '—', dec.drmsea != null ? signed(dec.drmsea) : '—', dec.text]
+    : [m.label, ...Array(8).fill('—'), 'Not estimated']));
   return { head, body };
 }
-function invProseText(models, { longitudinal = false } = {}) {
-  if (models.length < 2) return [];
-  const over = longitudinal ? 'across the two time points' : 'across groups';
-  const sup = [], fail = [];
-  models.forEach((m, i) => { if (i === 0) { sup.push(m.label); return; } const d = invarianceDecision(models[i - 1].parsed.fit, m.parsed.fit); if (d.ok) sup.push(m.label); else fail.push({ m, d }); });
-  if (!fail.length) return [`All invariance constraints were tenable ${over} (ΔCFI ≥ −.010, ΔTLI ≥ −.010, ΔRMSEA ≤ .015), supporting full measurement invariance.`];
-  const f = fail[0];
-  return [`Measurement invariance held up to the ${sup[sup.length - 1].toLowerCase()} level, but ${f.m.label.toLowerCase()} invariance was not supported (${deltaText(f.d)}).`];
+function invProseText(models, opts = {}) {
+  const s = invarianceProseText(models, opts); // the manuscript's paragraph, verbatim
+  return s ? [s] : [];
 }
 // Longitudinal note string for the invariance table (Word + .docx).
 function longiNote(models, modelLabel) {
-  return `N = ${models[0]?.parsed.nObs ?? '—'} across two time points${modelLabel ? ` (${modelLabel})` : ''}. Invariance supported when ΔCFI ≥ −.010, ΔTLI ≥ −.010, and ΔRMSEA ≤ .015 (Chen, 2007).`;
+  return `N = ${models[0]?.parsed.nObs ?? '—'} across two time points${modelLabel ? ` (${modelLabel})` : ''}. Invariance supported when ΔCFI ≥ −.010, ΔTLI ≥ −.010, and ΔRMSEA ≤ .015 (Chen, 2007).${unestimatedNote(invarianceSeries(models))}`;
 }
 
 const f2 = (x) => apaNum(x, 2, false);
