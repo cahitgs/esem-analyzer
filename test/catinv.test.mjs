@@ -229,5 +229,28 @@ ok('table: latentmean Δχ²=76.43* (p<.05 star)', /<td>76.43\*<\/td><td>3<\/td>
   ok('validateSpec: MLR with categorical items and no grouping is allowed (single-group models)', !/THETA and DIFFTEST/.test(validateSpec(mlr).errors.join(' | ')), validateSpec(mlr).errors);
 }
 
+console.log('\n— categorical CFA / bifactor-CFA chains (cinv:/bcinv:, WLSMV/THETA, DIFFTEST) —');
+{
+  const s = { ...spec, modelTypes: { cfa: true, esem: false, bifactorCfa: true, bifactorEsem: false } };
+  const ms = requestedModels(s);
+  ok('cfa + bcfa checked → 2 total-sample models + 6 cinv + 6 bcinv', ms.length === 14 && ms.filter((m) => m.key.startsWith('cinv:')).length === 6 && ms.filter((m) => m.key.startsWith('bcinv:')).length === 6, ms.map((m) => m.key));
+  const cc = buildInp(spec, 'cinv:configural'), cm = buildInp(spec, 'cinv:metric'), cs = buildInp(spec, 'cinv:scalar'), cl = buildInp(spec, 'cinv:latentmean');
+  ok('cinv configural: THETA, no rotation, first + referent thresholds labelled, group means free, uniquenesses @1 / free', /PARAMETERIZATION = THETA;/.test(cc) && !/ROTATION/.test(cc) && /\[duy1_t1\$1\] \(t1\);/.test(cc) && /\[duy1_t1\$2\] \(t2\);/.test(cc) && /\[F1\*\]; \[F2\*\]; \[F3\*\];/.test(cc) && /duy1_t1@1;/.test(cc) && /duy1_t1\*;/.test(cc), cc);
+  ok('cinv: DIFFTEST handshake with its own CfaInv_diff_* files', !/DIFFTEST/.test(cc.split('OUTPUT')[0]) && /SAVEDATA:\nDIFFTEST = CfaInv_diff_configural.dat;/.test(cc) && /DIFFTEST = CfaInv_diff_configural.dat;/.test(cm.split('MODEL:')[0]) && /SAVEDATA:\nDIFFTEST = CfaInv_diff_metric.dat;/.test(cm) && !/SAVEDATA/.test(cl), [cm.split('MODEL:')[0]]);
+  ok('cinv scalar: every threshold labelled', /\[duy1_t1\$3\] \(t3\);/.test(cs) && /\[duy1_t1\$4\] \(t4\);/.test(cs), cs);
+  const bc = buildInp(spec, 'bcinv:configural'), bm = buildInp(spec, 'bcinv:metric');
+  ok('bcinv configural: G on all items, orthogonal, THETA, one more (G) referent second threshold', /G BY duy1_t1\* duy2_t1/.test(bc) && /G WITH F1@0 F2@0 F3@0;/.test(bc) && /PARAMETERIZATION = THETA;/.test(bc) && (bc.split('MODEL okulB:')[0].match(/\$2\] \(t\d+\);/g) || []).length === 4 && (cc.split('MODEL okulB:')[0].match(/\$2\] \(t\d+\);/g) || []).length === 3, bc);
+  ok('bcinv: BifactorCfaInv_diff_* DIFFTEST files', /SAVEDATA:\nDIFFTEST = BifactorCfaInv_diff_configural.dat;/.test(bc) && /DIFFTEST = BifactorCfaInv_diff_configural.dat;/.test(bm.split('MODEL:')[0]), null);
+  for (const s2 of INV_SEQUENCE) ok(`cinv/bcinv ${s2}: lines ≤ 90 chars`, maxLineLength(buildInp(spec, `cinv:${s2}`)) <= 90 && maxLineLength(buildInp(spec, `bcinv:${s2}`)) <= 90);
+  const f1 = parseOut(fx('mg_cfa_cat_scalar.out')), f2 = parseOut(fx('mg_bcfa_cat_metric.out'));
+  ok('fixture: categorical CFA scalar → cfa / WLSMV / DIFFTEST 112.64 (33) / df 144', f1.invModel === 'cfa' && f1.invStep === 'Scalar (intercepts)' && /WLSMV/.test(f1.estimator) && f1.diffTest?.df === 33 && Math.abs(f1.diffTest.chi2 - 112.638) < 0.01 && f1.fit.df === 144, [f1.invModel, f1.estimator, f1.diffTest, f1.fit.df]);
+  ok('fixture: categorical bifactor-CFA metric → bcfa / DIFFTEST 17.36 (20) / df 104', f2.invModel === 'bcfa' && f2.diffTest?.df === 20 && f2.fit.df === 104, [f2.invModel, f2.diffTest, f2.fit.df]);
+  // four multi-group chains → four Word tables in model order
+  const lab = (n) => { const p = parseOut(fx(n)); return { label: p.invStep || n, parsed: p }; };
+  const word = buildWordHtml([lab('mg_bcat_1_configural.out'), lab('mg_cfa_configural.out'), lab('mg_cat_1_configural.out'), lab('mg_bcfa_configural.out'), lab('mg_cfa_metric.out')]);
+  const caps = [...word.matchAll(/Tests of measurement invariance \(([^)]+)\)/g)].map((m) => m[1]);
+  ok('Word export: one table per chain, in model order CFA, first-order ESEM, bifactor-CFA, bifactor-ESEM', caps.join('|') === 'CFA|first-order ESEM|bifactor-CFA|bifactor-ESEM', caps);
+}
+
 console.log(`\ncatinv.test: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

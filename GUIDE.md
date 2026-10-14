@@ -51,8 +51,9 @@ A few load-bearing conventions:
 - **Bifactor-ESEM:** `ROTATION = BI-GEOMIN(ORTHOGONAL .5);` with `G F1-Fk BY <items> (*1);`
 - **Invariance** uses the standardized-factors approach (`F@1`/`[F@0]` freed to `*`/`[*]` from weak
   invariance on) with alphanumeric equality labels `(i1-i#)`, `(u1-u#)`, `(cov#)`. With grouping on, the checked
-  measurement models are still generated on the total sample, followed by the first-order ESEM sequence, plus a parallel **bifactor-ESEM** sequence when that model
-  type is checked (orthogonal target rotation, the G factor's variance/mean/covariances handled per step).
+  measurement models are still generated on the total sample, followed by one invariance sequence per checked measurement model — **CFA**, **ESEM**, **bifactor-CFA** and
+  **bifactor-ESEM** (the bifactor chains handle the G factor's variance/mean/covariances per step; the bifactor-ESEM chain uses orthogonal
+  target rotation) — each with its own file prefix and its own results table.
 - **Categorical items** (all items flagged on the Data step) switch the multi-group sequence to the
   **WLSMV + `PARAMETERIZATION=THETA`** thresholds chain: configural already equates every item's first
   threshold plus one referent's second threshold per factor (Millsap identification — latent means are

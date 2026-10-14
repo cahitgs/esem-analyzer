@@ -208,8 +208,8 @@ function renderGroups() {
   host.append(el('p', { class: 'sub-h' }, 'Invariance steps (in order)'), seqBox);
 
   const banner = mode === 'time'
-    ? 'With time on, “Generate syntax” produces a longitudinal invariance sequence (one .inp per step, for each checked CFA/ESEM model). The Λ grid above is the Time-1 pattern, mirrored to Time 2; matching indicators’ residuals are correlated across waves.'
-    : 'With grouping on, “Generate syntax” produces this invariance sequence (using the first-order ESEM measurement model above — plus a bifactor-ESEM sequence when that model type is checked), one .inp per step.';
+    ? 'With time on, “Generate syntax” produces a longitudinal invariance sequence for each checked measurement model (CFA, ESEM, bifactor-CFA, bifactor-ESEM), one .inp per step and one results table per model. The Λ grid above is the Time-1 pattern, mirrored to Time 2; matching indicators’ residuals are correlated across waves.'
+    : 'With grouping on, “Generate syntax” produces this invariance sequence for each checked measurement model (CFA, ESEM, bifactor-CFA, bifactor-ESEM), one .inp per step and one results table per model, after the total-sample measurement models.';
   host.append(el('div', { class: 'mt-3' }, callout('info', banner)));
 }
 

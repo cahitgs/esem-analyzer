@@ -190,8 +190,9 @@ function onModelChange(ev) {
 }
 
 // ============================ Step 3 · Syntax ============================
-const LINV_TYPE = { esem: 'esem', cfa: 'cfa', besem: 'bifactorEsem' };
-const modelTypeOf = (key) => (key.startsWith('linv:') ? (LINV_TYPE[key.split(':')[1]] || 'esem') : key.startsWith('inv:') ? 'esem' : key);
+const LINV_TYPE = { esem: 'esem', cfa: 'cfa', bcfa: 'bifactorCfa', besem: 'bifactorEsem' };
+const MG_TYPE = { inv: 'esem', cinv: 'cfa', bcinv: 'bifactorCfa', binv: 'bifactorEsem' };
+const modelTypeOf = (key) => (key.startsWith('linv:') ? (LINV_TYPE[key.split(':')[1]] || 'esem') : (MG_TYPE[key.split(':')[0]] || key));
 
 function syntaxSheetFiles() {
   const spec = appState.spec; if (!spec) return [];
@@ -568,7 +569,10 @@ function renderResultsOutput() {
   const multi = sortInvarianceModels(appState.parsed.filter((m) => m.parsed.invKind !== 'longitudinal' && (m.parsed.nGroups || 1) > 1));
   const single = appState.parsed.filter((m) => m.parsed.invKind !== 'longitudinal' && (m.parsed.nGroups || 1) <= 1);
 
-  // Longitudinal: one comparison table per measurement model (ESEM vs CFA), least→most constrained.
+  // One comparison table per measurement model (CFA, ESEM, bifactor-CFA, bifactor-ESEM), least→most
+  // constrained; the model is named in the caption only when more than one chain is present.
+  const INV_KINDS = [['cfa', 'CFA'], ['esem', 'ESEM'], ['bcfa', 'Bifactor-CFA'], ['besem', 'Bifactor-ESEM']];
+  const byModel = (list) => INV_KINDS.map(([id, label]) => [list.filter((m) => (m.parsed.invModel || 'esem') === id), label]).filter(([set]) => set.length);
   const renderLongiBlock = (models, modelLabel) => {
     if (!models.length) return;
     const set = sortInvarianceModels(models);
@@ -579,22 +583,14 @@ function renderResultsOutput() {
     if (prose) addHtml(`${id}-p`, `<h3 class="ms-h3">Suggested APA text — longitudinal invariance${modelLabel ? ` (${modelLabel})` : ''}</h3>${prose}`);
   };
   if (longi.length) {
-    const esem = longi.filter((m) => !['cfa', 'besem'].includes(m.parsed.invModel));
-    const cfa = longi.filter((m) => m.parsed.invModel === 'cfa');
-    const besem = longi.filter((m) => m.parsed.invModel === 'besem');
-    // Only tag the model when several kinds are present; a single sequence needs no qualifier.
-    const kinds = [esem, cfa, besem].filter((s) => s.length).length;
-    renderLongiBlock(esem, kinds > 1 ? 'ESEM' : '');
-    renderLongiBlock(cfa, kinds > 1 ? 'CFA' : '');
-    renderLongiBlock(besem, kinds > 1 ? 'Bifactor-ESEM' : '');
+    const sets = byModel(longi);
+    for (const [set, label] of sets) renderLongiBlock(set, sets.length > 1 ? label : '');
   }
 
   if (multi.length) {
-    // Two MG families can coexist (first-order ESEM and bifactor-ESEM sequences) — mixing them in
-    // one df-sorted table would interleave non-nested models, so split by the generated TITLE.
-    const mgBesem = multi.filter((m) => /bifactor-ESEM/i.test(m.parsed.title || ''));
-    const mgFirst = multi.filter((m) => !/bifactor-ESEM/i.test(m.parsed.title || ''));
-    const kinds = [mgFirst, mgBesem].filter((s) => s.length).length;
+    // Up to four MG chains can coexist (CFA, ESEM, bifactor-CFA, bifactor-ESEM) — they are not nested in
+    // each other, so each gets its own table, split by the model named in the generated TITLE.
+    const sets = byModel(multi);
     const renderMgBlock = (models, modelLabel) => {
       if (!models.length) return;
       const cap = `Tests of measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`;
@@ -603,8 +599,7 @@ function renderResultsOutput() {
       const invProse = renderInvarianceProse(models);
       if (invProse) addHtml(`${id}-p`, `<h3 class="ms-h3">Suggested APA text — invariance${modelLabel ? ` (${modelLabel})` : ''}</h3>${invProse}`);
     };
-    renderMgBlock(mgFirst, kinds > 1 ? 'ESEM' : '');
-    renderMgBlock(mgBesem, kinds > 1 ? 'Bifactor-ESEM' : '');
+    for (const [set, label] of sets) renderMgBlock(set, sets.length > 1 ? label : '');
   }
 
   if (single.length) {

@@ -191,5 +191,24 @@ check('categorical wave columns → error (intercept chain is continuous-only)',
 const catOutside = makeSpec(); catOutside.data = { ...catOutside.data, categorical: ['GV'] };
 check('categorical column outside the waves is fine', validateSpec(catOutside).errors.length === 0, validateSpec(catOutside).errors);
 
+console.log('\n— bifactor-CFA longitudinal generator (linv:bcfa:) —');
+{
+  const s = makeSpec();
+  s.modelTypes = { cfa: false, esem: false, bifactorCfa: true, bifactorEsem: false };
+  const models = requestedModels(s);
+  check('bcfa: 6 models with linv:bcfa keys, LongInv_bcfa_* files, Bifactor-CFA labels', models.length === 6 && models.every((m) => /^linv:bcfa:/.test(m.key) && /^LongInv_bcfa_\d_/.test(m.file) && /^Bifactor-CFA · /.test(m.label)), models.map((m) => [m.key, m.file, m.label]));
+  const bc = buildInp(s, 'linv:bcfa:configural'), bm = buildInp(s, 'linv:bcfa:metric'), bs = buildInp(s, 'linv:bcfa:scalar'), bv = buildInp(s, 'linv:bcfa:varcov'), bl = buildInp(s, 'linv:bcfa:latentmean');
+  check('bcfa configural: G1/G2 on every wave item, specific factors, orthogonal within wave, T2 variances @1', /G1 BY X1\* X2 X3 X4 X5 X6;/.test(bc) && /G2 BY Y1\* Y2 Y3 Y4 Y5 Y6;/.test(bc) && /F3 BY Y1\* Y2 Y3;/.test(bc) && /G1 WITH F1@0 F2@0;/.test(bc) && /G2 WITH F3@0 F4@0;/.test(bc) && /F1 WITH F2@0;/.test(bc) && /G2@1;/.test(bc) && /F3-F4@1;/.test(bc) && !/ROTATION/.test(bc) && /Longitudinal invariance \(bifactor-CFA\) - Configural/.test(bc), bc);
+  check('bcfa metric: loadings equated by shared labels (LG_p, Lf_p), T2 variances free', /G1 BY X1\* \(LG_1\);/.test(bm) && /G2 BY Y1\* \(LG_1\);/.test(bm) && /G2 BY Y6 \(LG_6\);/.test(bm) && /F1 BY X1\* \(L1_1\);/.test(bm) && /F3 BY Y1\* \(L1_1\);/.test(bm) && /F4 BY Y4\* \(L2_1\);/.test(bm) && !/G2@1;/.test(bm) && !/F3-F4@1;/.test(bm), bm);
+  check('bcfa scalar: intercepts equated, T1 means @0 (G1 included), T2 means free', (bs.match(/\(i1-i6\)/g) || []).length === 2 && /\[F1-F2@0\];/.test(bs) && /\[G1@0\];/.test(bs) && /\[F3-F4\];/.test(bs) && /\[G2\];/.test(bs), bs);
+  check('bcfa varcov: T2 variances refixed incl. G2, no covariance labels', /G2@1;/.test(bv) && /F3-F4@1;/.test(bv) && !/lcov/.test(bv), bv);
+  check('bcfa latent means: T2 means refixed incl. G2', /\[F3-F4@0\];/.test(bl) && /\[G2@0\];/.test(bl), bl);
+  check('bcfa: correlated uniquenesses across waves', /X1 WITH Y1;/.test(bc) && /X6 WITH Y6;/.test(bl), null);
+  check('bcfa: all lines ≤ 90 chars at every step', ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'].every((st) => maxLineLength(buildInp(s, `linv:bcfa:${st}`)) <= 90), null);
+  const f1 = parseOut(fx('long_bcfa_configural.out')), f2 = parseOut(fx('long_bcfa_metric.out'));
+  check('fixture: longitudinal bifactor-CFA titles → longitudinal / bcfa / step', f1.invKind === 'longitudinal' && f1.invModel === 'bcfa' && f1.invStep === 'Configural' && f2.invStep === 'Metric (loadings)', [f1.invKind, f1.invModel, f1.invStep, f2.invStep]);
+  check('fixture: df 200 → 220 (+2p−(k+1) = 20 loading constraints; 12 items × 3 factors, N = 2500)', f1.fit.df === 200 && f2.fit.df === 220 && f1.nObs === 2500, [f1.fit.df, f2.fit.df, f1.nObs]);
+}
+
 console.log(`\nlongitudinal.test: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

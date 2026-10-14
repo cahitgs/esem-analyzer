@@ -115,16 +115,16 @@ export function parseOut(text) {
   // nGroups can't be used). "Longitudinal invariance [(CFA)] - <Step>".
   if (res.title && /^Longitudinal invariance/i.test(res.title)) {
     res.invKind = 'longitudinal';
-    res.invModel = /\(CFA\)/i.test(res.title) ? 'cfa' : /\(bifactor-ESEM\)/i.test(res.title) ? 'besem' : 'esem';
+    res.invModel = /\(bifactor-CFA\)/i.test(res.title) ? 'bcfa' : /\(CFA\)/i.test(res.title) ? 'cfa' : /\(bifactor-ESEM\)/i.test(res.title) ? 'besem' : 'esem';
     // the separator is " - " WITH spaces — "(bifactor-ESEM)" contains a bare hyphen that must not match
     const m = res.title.match(/\s-\s(.+)$/);
     res.invStep = m ? m[1].trim() : null; // e.g. "Metric (loadings)"
   } else if (res.title && /^MG invariance/i.test(res.title)) {
-    // App-generated multi-group titles: "MG invariance[ (categorical|bifactor-ESEM)] - <Step>". The same
+    // App-generated multi-group titles: "MG invariance[ (categorical|CFA|bifactor-CFA|bifactor-ESEM)] - <Step>". The same
     // step capture labels every multi-group row by its step in the Results table and the Word export
     // (nGroups still decides the multi-group grouping; invKind only names the family).
     res.invKind = 'multigroup';
-    res.invModel = /\(bifactor-ESEM/i.test(res.title) ? 'besem' : 'esem';
+    res.invModel = /\(bifactor-ESEM/i.test(res.title) ? 'besem' : /\(bifactor-CFA/i.test(res.title) ? 'bcfa' : /\(CFA/i.test(res.title) ? 'cfa' : 'esem';
     const m = res.title.match(/\s-\s(.+)$/);
     res.invStep = m ? m[1].trim() : null;
   }

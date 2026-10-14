@@ -110,5 +110,13 @@ check('MG bifactor (categorical) title → besem / Metric (loadings) / TARGET', 
 const mcat = parseOut(fx('mg_cat_3_scalar.out'));
 check('MG first-order (categorical) title → esem / Scalar (intercepts)', mcat.invModel === 'esem' && mcat.invStep === 'Scalar (intercepts)', [mcat.invModel, mcat.invStep]);
 
+console.log('\n— CFA / bifactor-CFA chain titles —');
+{
+  const a = parseOut(fx('mg_cfa_metric.out')), b = parseOut(fx('mg_bcfa_scalar.out')), c = parseOut(fx('long_bcfa_metric.out')), d = parseOut(fx('mg_bcfa_cat_metric.out'));
+  check('"MG invariance (CFA) - …" → multigroup / cfa, no rotation', a.invKind === 'multigroup' && a.invModel === 'cfa' && a.invStep === 'Metric (loadings)' && a.rotation === null, [a.invModel, a.invStep, a.rotation]);
+  check('"MG invariance (bifactor-CFA) - …" → bcfa (never cfa or besem)', b.invModel === 'bcfa' && b.invStep === 'Scalar (intercepts)' && d.invModel === 'bcfa', [b.invModel, b.invStep, d.invModel]);
+  check('"Longitudinal invariance (bifactor-CFA) - …" → longitudinal / bcfa', c.invKind === 'longitudinal' && c.invModel === 'bcfa' && c.invStep === 'Metric (loadings)', [c.invKind, c.invModel, c.invStep]);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

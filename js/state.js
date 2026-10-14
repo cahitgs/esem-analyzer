@@ -468,13 +468,12 @@ export function validateSpec(spec) {
       warnings.push('Categorical invariance: Δχ² comes from Mplus DIFFTEST — run the generated models in order, in the same folder, so each step finds the previous step\'s Inv_diff_*.dat (and BifactorInv_diff_*.dat) file.');
       // Morin's thresholds identification needs one referent item with ≥ 3 categories per factor (and one
       // more for the G factor of the bifactor chain); without it the configural/metric models are not identified.
-      const { missing } = thresholdReferents(spec, thresholdCounts(spec), { general: !!spec.modelTypes.bifactorEsem });
+      const { missing } = thresholdReferents(spec, thresholdCounts(spec), { general: !!(spec.modelTypes.bifactorEsem || spec.modelTypes.bifactorCfa) });
       if (missing.length) {
         const names = missing.map((id) => (id === 'G' ? 'the general factor' : (spec.factors.find((f) => f.id === id)?.label || id)));
-        errors.push(`Categorical invariance needs, for each factor${spec.modelTypes.bifactorEsem ? ' and for the general factor' : ''}, one referent item with at least three response categories — its second threshold is equated across groups to identify the latent means (Morin's rule). None is available for ${names.join(', ')}. Add such an item${missing.includes('G') ? ' that is not already a specific factor\'s referent (or uncheck bifactor-ESEM)' : ''}, or treat the items as continuous.`);
+        errors.push(`Categorical invariance needs, for each factor${spec.modelTypes.bifactorEsem || spec.modelTypes.bifactorCfa ? ' and for the general factor' : ''}, one referent item with at least three response categories — its second threshold is equated across groups to identify the latent means (Morin's rule). None is available for ${names.join(', ')}. Add such an item${missing.includes('G') ? ' that is not already a specific factor\'s referent (or uncheck the bifactor models)' : ''}, or treat the items as continuous.`);
       }
     }
-    if (spec.modelTypes.bifactorCfa) warnings.push('Bifactor-CFA is not generated across groups — multi-group sequences cover first-order ESEM and (when checked) bifactor-ESEM.');
   }
 
   if (spec.aids?.positiveResiduals?.length && (spec.groups.enabled || spec.longitudinal?.enabled)) {
@@ -497,7 +496,6 @@ export function validateSpec(spec) {
     const catLong = [...(w1 || []), ...(w2 || [])].filter((v) => spec.data.categorical.includes(v));
     if (catLong.length) errors.push(`Longitudinal invariance is generated for continuous indicators only; ${catLong.length} selected column${catLong.length > 1 ? 's are' : ' is'} flagged categorical (${catLong.slice(0, 4).join(', ')}${catLong.length > 4 ? ', …' : ''}). Unflag them on the Data step, or test invariance across groups, where the thresholds-based WLSMV chain is available.`);
     if ((spec.longitudinal.invariance.sequence?.length || 0) === 0) errors.push('Select at least one invariance step (start with Configural).');
-    if (spec.modelTypes.bifactorCfa) warnings.push('Bifactor-CFA is not generated across time — longitudinal sequences cover CFA, ESEM, and bifactor-ESEM.');
     // the pairing is positional (waves[1][k] re-measures waves[0][k]); catch an id column or a shifted pairing
     for (const it of w2 || []) if (looksLikeId(spec.data, it)) warnings.push(`${it} looks like a case identifier — remove it from Time 2; with it in the list every Time-1/Time-2 pair is shifted.`);
     // only when the names DO carry a wave pairing and the user's pairs do not share one substitution (x1_t1 ↔ x1_t3

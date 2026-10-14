@@ -37,7 +37,7 @@ links to it on localhost and remembers the choice. A first-visit **Guide** expla
 - **CFA** (independent-clusters, standardized-factor identification `F1 BY x1* …; F1@1;`)
 - **ESEM** — Geomin (oblique/orthogonal, ε) and Target rotation
 - **Bifactor-CFA** and **Bifactor-ESEM** (BI-GEOMIN orthogonal / orthogonal Target)
-- **Measurement invariance** — across **groups** (multi-group, for first-order ESEM and **bifactor-ESEM**) or across **time** (within-person, 2-wave longitudinal, for CFA, ESEM, and **bifactor-ESEM**): configural → metric → scalar → strict → variance–covariance → latent means (Satorra–Bentler scaled Δχ² for MLR; Chen 2007 ΔCFI/ΔTLI/ΔRMSEA verdicts). Longitudinal models equate loadings across waves and correlate each indicator's residual over time; the bifactor sequences follow Morin's Hoyle-Handbook chapter (orthogonal target rotation, general + specific factors).
+- **Measurement invariance** — across **groups** (multi-group) or across **time** (within-person, 2-wave longitudinal), for every checked measurement model — **CFA, ESEM, bifactor-CFA and bifactor-ESEM** each get their own sequence and their own results table: configural → metric → scalar → strict → variance–covariance → latent means (Satorra–Bentler scaled Δχ² for MLR; Chen 2007 ΔCFI/ΔTLI/ΔRMSEA verdicts). Longitudinal models equate loadings across waves and correlate each indicator's residual over time; the bifactor sequences follow Morin's Hoyle-Handbook chapter (orthogonal target rotation, general + specific factors).
 - **Categorical (ordinal) invariance** — flag every item categorical and the multi-group sequence switches to the thresholds-based **WLSMV + THETA** chain (Millsap identification: first thresholds + one referent's second threshold equated from configural on) and wires the **`DIFFTEST`** handshake between steps automatically; the Results table then reports Mplus's difference-test Δχ² instead of a (invalid) Satorra–Bentler value. The **bifactor-ESEM** sequence gets the same thresholds chain — with one extra referent threshold for the G factor (Morin's T15/T42 rule) and its own `BifactorInv_diff_*.dat` files. Longitudinal sequences are continuous-only; categorical wave columns are refused with an explanation.
 - **ESEM-within-CFA** — convert a rotated ESEM solution into an equivalent CFA you can embed in larger SEM/MIMIC/DIF models (Morin's referent method)
 - **Convergence aids** (optional, on the Syntax step) — the two remedies Morin uses in the Hoyle-Handbook chapter: a loosened `CONVERGENCE` criterion (emitted for every model, invariance sequences included) and per-item residual-variance positivity constraints (`item (res#); … MODEL CONSTRAINT: res# > 0;`, single-group measurement models only) for Heywood cases. With a missing-value code and an ML-family estimator the loosened criterion also brings a matching `H1CONVERGENCE` line, plus `H1ITERATIONS` wherever an `ITERATIONS` line is set (Morin's T32 note). Every model requests Morin's recommended `OUTPUT: SAMPSTAT STANDARDIZED MODINDICES CINTERVAL RESIDUAL SVALUES TECH1 TECH3 TECH4;`
@@ -113,16 +113,16 @@ The engines are unit-tested against **real Mplus `.out` fixtures**, and the gene
 back through Mplus 8.3 to confirm it reproduces the intended models (matching degrees of freedom and fit).
 
 ```bash
-node test/parser.test.mjs       # .out parser             (65)
+node test/parser.test.mjs       # .out parser             (68)
 node test/dataparse.test.mjs    # data-file detection     (9)
 node test/ewc.test.mjs          # ESEM-within-CFA         (52)
-node test/longitudinal.test.mjs # longitudinal invariance (69)
+node test/longitudinal.test.mjs # longitudinal invariance (79)
 node test/apa.test.mjs          # Morin-style APA tables   (16)
 node test/docx.test.mjs         # Word/.docx export        (15)
 node test/aids.test.mjs         # convergence aids         (36)
 node test/runscripts.test.mjs   # auto-mode run scripts    (18)
-node test/mginv.test.mjs        # MG bifactor-ESEM invariance (26)
-node test/catinv.test.mjs       # categorical WLSMV invariance + DIFFTEST, ESEM + bifactor-ESEM chains (97)
+node test/mginv.test.mjs        # MG bifactor-ESEM invariance (57)
+node test/catinv.test.mjs       # categorical WLSMV invariance + DIFFTEST, ESEM + bifactor-ESEM chains (112)
 node test/invorder.test.mjs     # invariance step order, unestimated outputs (MG + longitudinal), total-sample models, ID columns, Time-2 pairing incl. an 18 000-file name sweep (138)
 ```
 
