@@ -20,6 +20,7 @@ export function serializeSpec(spec) {
     items: spec.items.slice(), factors: spec.factors.map((f) => ({ ...f })), target: clone(spec.target),
     rotation: { ...spec.rotation }, estimator: spec.estimator, modelTypes: { ...spec.modelTypes }, bifactor: { ...spec.bifactor },
     groups: clone(spec.groups), longitudinal: clone(spec.longitudinal), output: { ...spec.output }, aids: clone(spec.aids),
+    recode: clone(spec.recode || {}),
   };
 }
 
@@ -65,6 +66,8 @@ export function applySavedSpec(spec, saved, { withData = false } = {}) {
     spec.longitudinal = { ...spec.longitudinal, ...L, invariance: { ...spec.longitudinal.invariance, ...(L.invariance || {}) } };
     if (spec.longitudinal.enabled && spec.longitudinal.waves[0].length >= 2) setItems(spec, spec.longitudinal.waves[0].slice()); // Time-1 columns are the item set
   }
+  spec.recode = {};
+  if (saved.recode && typeof saved.recode === 'object') for (const [col, m] of Object.entries(saved.recode)) if (names.has(col) && m && typeof m === 'object') spec.recode[col] = { ...m };
   if (withData && spec.data) {
     spec.data.categorical = keep(saved.categorical);
     if (saved.missingCode !== undefined) spec.data.missingCode = saved.missingCode;

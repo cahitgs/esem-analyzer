@@ -11,7 +11,10 @@ export function expectedOutName(inpName) {
  *  header also says MUTHEN & MUTHEN, so a just-started file must not match. A hard crash can
  *  truncate the file before the footer — the watcher's stable-size fallback covers that. */
 export function hasEndingMarker(outText) {
-  return /^\s*Ending Time:/m.test(String(outText).slice(-2000));
+  // a finished run ends with "Ending Time:"; a run Mplus aborted on an input or data error (e.g. a response
+  // category empty in one group) never prints it but still closes with the Muthén & Muthén footer
+  const tail = String(outText).slice(-2000);
+  return /^\s*Ending Time:/m.test(tail) || /MUTHEN & MUTHEN[\s\S]*Copyright \(c\)/.test(tail);
 }
 
 const norm = (files) => files.map((f) => (typeof f === 'string' ? f : f.file || f.name));

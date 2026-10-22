@@ -62,8 +62,13 @@ A few load-bearing conventions:
   next step reads them via `ANALYSIS: DIFFTEST = …;` — **run the models in order, in one folder** (auto
   mode does this for you), so Mplus can print the difference test the Results table relies on. The
   bifactor-ESEM sequence follows the same chain (one more referent's second threshold for the G factor,
-  Morin's rule) with its own `BifactorInv_diff_<step>.dat` files. Longitudinal sequences are for
-  continuous indicators only — categorical wave columns are refused on the Model step.
+  Morin's rule) with its own `BifactorInv_diff_<step>.dat` files. Across time the same thresholds chain is
+  generated for CFA, ESEM, bifactor-CFA and bifactor-ESEM (thresholds equated across waves by shared labels, Time-1
+  uniquenesses fixed at 1, `LongInv_<model>_diff_<step>.dat` files). Mixed item sets (some ordinal, some continuous)
+  run under WLSMV/THETA with thresholds for the ordinal and intercepts for the continuous items (CFA, ESEM and
+  bifactor-CFA; a factor's latent mean is freed from configural on only when it owns an ordinal referent). A response
+  category empty in one group or at one wave stops WLSMV: the invariance card lists these **sparse categories** with
+  their counts and merges them into a neighbour on request (`DEFINE: IF (item EQ k) THEN item = j;` in every input).
 - Every model requests Morin's recommended output line, `SAMPSTAT STANDARDIZED MODINDICES CINTERVAL
   RESIDUAL SVALUES TECH1 TECH3 TECH4`; `SVALUES` is what ESEM-within-CFA (below) needs. With the loosened
   `CONVERGENCE` aid on and a missing-value code set, ML-family models also get a matching `H1CONVERGENCE`

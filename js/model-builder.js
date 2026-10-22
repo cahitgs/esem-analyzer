@@ -2,7 +2,7 @@
 // syntax preview (opened in the Mplus sheet). Mutates the shared ModelSpec via state.js helpers
 // and re-renders; the paper on the right draws the hypothesized model from the same spec.
 import { el, $, $$, toast, downloadText } from './ui.js';
-import { setFactorCount, setItems, setWaveItems, setTime1, toggleTarget, factorIds, validateSpec, guessWaveCounterparts, orderWave2 } from './state.js';
+import { setFactorCount, setItems, setWaveItems, setTime1, toggleTarget, factorIds, validateSpec, guessWaveCounterparts, orderWave2, sparseCategories, setMerge, clearMerge, categoryCounts } from './state.js';
 import { buildInp, requestedModels, INV_SEQUENCE, INV_META } from './syntax-generator.js';
 import { distinctValues } from './data-parse.js';
 import { serializeSpec, applySavedSpec } from './spec-store.js';
@@ -265,6 +265,7 @@ function renderGroups() {
     seqBox.append(el('button', { type: 'button', class: 'chip chip-sm', 'aria-pressed': on ? 'true' : 'false', onclick: () => { toggleStep(seqHolder, step, !on); updatePreview(); renderGroups(); } }, INV_META[step].label));
   }
   host.append(el('p', { class: 'sub-h' }, 'Invariance steps (in order)'), seqBox);
+  renderResponseCategories(host);
 
   const banner = mode === 'time'
     ? 'With time on, “Generate syntax” produces a longitudinal invariance sequence for each checked measurement model (CFA, ESEM, bifactor-CFA, bifactor-ESEM), one .inp per step and one results table per model. The Λ grid above is the Time-1 pattern, mirrored to Time 2; matching indicators’ residuals are correlated across waves.'
@@ -328,6 +329,27 @@ function wavePicker(waveIdx) {
     }, v));
   }
   return box;
+}
+
+// Ordinal items whose categories are empty in some groups or at one wave: offer to merge them (Morin's point 9).
+// Merges are written as DEFINE lines and change the threshold counts; they are listed here with an undo.
+function renderResponseCategories(host) {
+  const sparse = sparseCategories(SPEC);
+  const merges = Object.entries(SPEC.recode || {}).flatMap(([col, m]) => Object.entries(m).map(([from, to]) => ({ col, from, to })));
+  if (!sparse.length && !merges.length) return;
+  const box = el('div', { class: 'flex flex-col gap-2' });
+  if (sparse.length) {
+    const rows = sparse.map((s) => el('div', { class: 'row', style: { gap: '10px', alignItems: 'center' } }, [
+      el('span', { class: 'mono small' }, `${s.item} = ${s.level}`),
+      el('span', { class: 'small muted' }, s.counts.map((c) => `${c.label}: ${c.n}`).join(' · ')),
+      btn(`Merge ${s.level} → ${s.to}`, { size: 'btn-sm', onclick: () => { for (const col of s.columns) setMerge(SPEC, col, s.level, s.to); refresh(); } }),
+    ]));
+    box.append(callout('warn', [el('div', {}, 'These response categories are empty in some groups or at one wave but not everywhere. Mplus cannot estimate a threshold for an empty category, so the WLSMV models stop; merge each one into its neighbour (the merge is written as a DEFINE line in every input).'), ...rows]));
+  }
+  if (merges.length) {
+    box.append(el('div', { class: 'chips' }, merges.map((m) => el('button', { type: 'button', class: 'chip chip-sm mono', 'aria-pressed': 'true', title: 'click to undo this merge', onclick: () => { clearMerge(SPEC, m.col, m.from); refresh(); } }, `${m.col}: ${m.from} → ${m.to} ✕`))));
+  }
+  host.append(el('p', { class: 'sub-h' }, 'Response categories'), box);
 }
 
 // Switch invariance mode, keeping groups/longitudinal mutually exclusive and seeding sensible defaults.

@@ -1,0 +1,63 @@
+Mplus VERSION 8.3
+MUTHEN & MUTHEN
+10/23/2026  12:26 AM
+
+INPUT INSTRUCTIONS
+
+  TITLE:
+  MG invariance (CFA) - Configural
+  DATA:
+  FILE = "esem_sim_3f_likert_seyrek.dat";
+  VARIABLE:
+  NAMES ARE id m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 cinsiyet;
+  USEVARIABLES ARE m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12;
+  CATEGORICAL ARE ALL;
+  GROUPING IS cinsiyet (1 = g1 2 = g2);
+  ANALYSIS:
+  ESTIMATOR IS WLSMV;
+  PARAMETERIZATION = THETA;
+  MODEL:
+  F1 BY m1* m2 m3 m4;
+  F2 BY m5* m6 m7 m8;
+  F3 BY m9* m10 m11 m12;
+  F1-F3@1;
+  [F1-F3@0];
+  [m1$1] (t1); [m1$2] (t2); [m1$3]; [m1$4]; [m2$1] (t5); [m2$2]; [m2$3]; [m2$4];
+  [m3$1] (t9); [m3$2]; [m3$3]; [m3$4]; [m4$1] (t13); [m4$2]; [m4$3]; [m4$4];
+  [m5$1] (t17); [m5$2] (t18); [m5$3]; [m5$4]; [m6$1] (t21); [m6$2]; [m6$3]; [m6$4];
+  [m7$1] (t25); [m7$2]; [m7$3]; [m7$4]; [m8$1] (t29); [m8$2]; [m8$3]; [m8$4];
+  [m9$1] (t33); [m9$2] (t34); [m9$3]; [m9$4]; [m10$1] (t37); [m10$2]; [m10$3]; [m10$4];
+  [m11$1] (t41); [m11$2]; [m11$3]; [m11$4]; [m12$1] (t45); [m12$2]; [m12$3]; [m12$4];
+  m1@1; m2@1; m3@1; m4@1; m5@1; m6@1; m7@1; m8@1; m9@1; m10@1; m11@1; m12@1;
+  MODEL g2:
+  F1 BY m1* m2 m3 m4;
+  F2 BY m5* m6 m7 m8;
+  F3 BY m9* m10 m11 m12;
+  F1-F3@1;
+  [F1*]; [F2*]; [F3*];
+  [m1$1] (t1); [m1$2] (t2); [m1$3]; [m1$4]; [m2$1] (t5); [m2$2]; [m2$3]; [m2$4];
+  [m3$1] (t9); [m3$2]; [m3$3]; [m3$4]; [m4$1] (t13); [m4$2]; [m4$3]; [m4$4];
+  [m5$1] (t17); [m5$2] (t18); [m5$3]; [m5$4]; [m6$1] (t21); [m6$2]; [m6$3]; [m6$4];
+  [m7$1] (t25); [m7$2]; [m7$3]; [m7$4]; [m8$1] (t29); [m8$2]; [m8$3]; [m8$4];
+  [m9$1] (t33); [m9$2] (t34); [m9$3]; [m9$4]; [m10$1] (t37); [m10$2]; [m10$3]; [m10$4];
+  [m11$1] (t41); [m11$2]; [m11$3]; [m11$4]; [m12$1] (t45); [m12$2]; [m12$3]; [m12$4];
+  m1*; m2*; m3*; m4*; m5*; m6*; m7*; m8*; m9*; m10*; m11*; m12*;
+  OUTPUT:
+  SAMPSTAT STANDARDIZED MODINDICES CINTERVAL RESIDUAL SVALUES TECH1 TECH3 TECH4;
+  SAVEDATA:
+  DIFFTEST = CfaInv_diff_configural.dat;
+
+*** ERROR
+  Group 2 does not contain all values of categorical variable: M3
+
+
+MUTHEN & MUTHEN
+3463 Stoner Ave.
+Los Angeles, CA  90066
+
+Tel: (310) 391-9971
+Fax: (310) 391-8971
+Web: www.StatModel.com
+Support: Support@StatModel.com
+
+Copyright (c) 1998-2019 Muthen & Muthen

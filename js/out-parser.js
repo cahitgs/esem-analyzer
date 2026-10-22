@@ -87,7 +87,7 @@ export function parseOut(text) {
   const lines = String(text).split(/\r\n|\r|\n/);
   const res = {
     title: null, estimator: null, rotation: null, nObs: null, nFreeParams: null,
-    invKind: null, invStep: null, invModel: null, diffTest: null,
+    invKind: null, invStep: null, invModel: null, diffTest: null, emptyCategory: null,
     fit: {}, loadings: {}, factorOrder: [], items: [], factorCorr: [],
     residualVariances: {}, intercepts: {}, factorVariances: {}, rSquare: {},
     uniqueness: {}, omega: {}, primaryFactor: {}, regressions: [],
@@ -102,6 +102,10 @@ export function parseOut(text) {
   if (!res.chiSquareComputed) res.warnings.push('Robust χ² and fit indices could not be computed for this model.');
   if (/NOT POSITIVE DEFINITE/i.test(text)) res.warnings.push('A covariance matrix was not positive definite — inspect the solution.');
   // A rotation that fails leaves no fit statistics: Mplus prints the unrotated solution only.
+  // a response category present in one group but empty in another: Mplus stops before estimating (WLSMV)
+  const ec = text.match(/Group\s+(\d+)\s+does not contain all values of categorical variable:\s*(\w+)/i);
+  res.emptyCategory = ec ? { group: Number(ec[1]), variable: ec[2] } : null;
+  if (res.emptyCategory) res.warnings.push(`Group ${res.emptyCategory.group} has no observations in a response category of ${res.emptyCategory.variable} — merge that category into its neighbour (Model step, Response categories) and run again.`);
   res.rotationFailed = /NO CONVERGENCE IN ROTATION ALGORITHM|PROBLEM OCCURRED IN THE ROTATION ALGORITHM/i.test(text);
   if (res.rotationFailed) res.warnings.push('The rotation algorithm did not converge — Mplus reports the unrotated solution and no fit statistics.');
 

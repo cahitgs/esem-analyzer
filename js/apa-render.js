@@ -141,6 +141,7 @@ export function sortInvarianceModels(models) {
 /** Why an output carries no fit statistics (null when it has them). */
 export function noFitReason(p) {
   if (p?.fit?.chi2 != null && p?.fit?.df != null) return null;
+  if (p?.emptyCategory) return `a response category of ${p.emptyCategory.variable} is empty in group ${p.emptyCategory.group} — merge it on the Model step`;
   if (!p?.converged) return 'did not converge';
   if (p.rotationFailed) return 'rotation did not converge';
   if (p.chiSquareComputed === false) return 'χ² could not be computed';

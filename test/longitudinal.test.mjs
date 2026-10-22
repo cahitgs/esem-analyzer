@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createModelSpec, setWaveItems, setFactorCount, validateSpec } from '../js/state.js';
-import { buildInp, requestedModels, maxLineLength } from '../js/syntax-generator.js';
+import { buildInp, requestedModels, maxLineLength, isCategoricalLongitudinal } from '../js/syntax-generator.js';
 import { parseOut } from '../js/out-parser.js';
 import { invarianceDecision, renderInvarianceTable } from '../js/apa-render.js';
 
@@ -187,7 +187,7 @@ both.groups.enabled = true; both.groups.variable = 'GV'; both.groups.codes = [{ 
 check('multigroup + longitudinal mutually exclusive', validateSpec(both).errors.some((e) => /either multi-group or longitudinal/i.test(e)), validateSpec(both).errors);
 const catLong = makeSpec();
 catLong.data.categorical = ['X1', 'Y2']; // one column per wave flagged categorical
-check('categorical wave columns → error (intercept chain is continuous-only)', validateSpec(catLong).errors.some((e) => /continuous indicators only/i.test(e) && /X1, Y2/.test(e)), validateSpec(catLong).errors);
+check('some (not all) wave columns categorical → error asking to flag all or none', validateSpec(catLong).errors.some((e) => /2 of the 12 wave columns are flagged categorical/.test(e) && /flag all of them/.test(e)), validateSpec(catLong).errors);
 const catOutside = makeSpec(); catOutside.data = { ...catOutside.data, categorical: ['GV'] };
 check('categorical column outside the waves is fine', validateSpec(catOutside).errors.length === 0, validateSpec(catOutside).errors);
 
@@ -208,6 +208,56 @@ console.log('\n— bifactor-CFA longitudinal generator (linv:bcfa:) —');
   const f1 = parseOut(fx('long_bcfa_configural.out')), f2 = parseOut(fx('long_bcfa_metric.out'));
   check('fixture: longitudinal bifactor-CFA titles → longitudinal / bcfa / step', f1.invKind === 'longitudinal' && f1.invModel === 'bcfa' && f1.invStep === 'Configural' && f2.invStep === 'Metric (loadings)', [f1.invKind, f1.invModel, f1.invStep, f2.invStep]);
   check('fixture: df 200 → 220 (+2p−(k+1) = 20 loading constraints; 12 items × 3 factors, N = 2500)', f1.fit.df === 200 && f2.fit.df === 220 && f1.nObs === 2500, [f1.fit.df, f2.fit.df, f1.nObs]);
+}
+
+console.log('\n— ordinal (WLSMV / THETA / DIFFTEST) longitudinal chain —');
+{
+  const t1 = ['a1_t1', 'a2_t1', 'a3_t1', 'b1_t1', 'b2_t1', 'b3_t1'], t2 = t1.map((x) => x.replace('_t1', '_t2'));
+  const rows = Array.from({ length: 200 }, (_, r) => [r + 1, ...t1.map((_, i) => 1 + ((r + i) % 5)), ...t2.map((_, i) => 1 + ((r + 2 * i) % 5))].map(String));
+  const mk = (cat) => {
+    const s = createModelSpec({ fileName: 'l.dat', delimiter: 'whitespace', hasHeader: false, nCols: 13, nRows: 200, varNames: ['id', ...t1, ...t2], categorical: cat, missingCode: null, _matrix: rows });
+    s.longitudinal.enabled = true; setWaveItems(s, 0, t1); setWaveItems(s, 1, t2); setFactorCount(s, 2);
+    const ids = s.factors.map((f) => f.id); for (const it of t1) s.target[it] = {}; t1.forEach((it, i) => { s.target[it][ids[Math.floor(i / 3)]] = true; });
+    s.estimator = 'WLSMV';
+    return s;
+  };
+  const s = mk([...t1, ...t2]);
+  check('all wave columns categorical + WLSMV → valid, isCategoricalLongitudinal', validateSpec(s).errors.length === 0 && isCategoricalLongitudinal(s) === true, validateSpec(s).errors);
+  const c = buildInp(s, 'linv:esem:configural'), m = buildInp(s, 'linv:esem:metric'), sc = buildInp(s, 'linv:esem:scalar'), st = buildInp(s, 'linv:esem:strict'), vc = buildInp(s, 'linv:esem:varcov'), lm = buildInp(s, 'linv:esem:latentmean');
+  check('configural: THETA, WLSMV, CATEGORICAL ARE ALL, Geomin, no DIFFTEST in, SAVEDATA out', /PARAMETERIZATION = THETA;/.test(c) && /ESTIMATOR IS WLSMV;/.test(c) && /CATEGORICAL ARE ALL;/.test(c) && /ROTATION=GEOMIN/.test(c) && !/DIFFTEST = /.test(c.split('MODEL:')[0]) && /SAVEDATA:\nDIFFTEST = LongInv_esem_diff_configural.dat;/.test(c), c);
+  check('configural: first thresholds + referent second thresholds share labels across waves; others free', /\[a1_t1\$1\] \(th1_1\);/.test(c) && /\[a1_t2\$1\] \(th1_1\);/.test(c) && /\[a1_t1\$2\] \(th1_2\);/.test(c) && /\[a1_t2\$2\] \(th1_2\);/.test(c) && /\[a2_t1\$2\];/.test(c) && /\[a2_t2\$2\];/.test(c) && /\[b1_t1\$2\] \(th4_2\);/.test(c) && /\[a1_t1\$3\];/.test(c), c);
+  check('configural: Time-1 uniquenesses @1, Time-2 free; Time-1 means @0, Time-2 means free from the start', /a1_t1@1; a2_t1@1;/.test(c) && /a1_t2\*; a2_t2\*;/.test(c) && /\[F1-F2@0\];\n\[F3-F4\];/.test(c), c);
+  check('configural: correlated uniquenesses kept under WLSMV', /a1_t1 WITH a1_t2;/.test(c) && /b3_t1 WITH b3_t2;/.test(c));
+  check('metric: loadings linked (*t1 1)/(*t2 1), DIFFTEST reads the configural derivatives, saves its own', /\(\*t1 1\);/.test(m) && /\(\*t2 1\);/.test(m) && /DIFFTEST = LongInv_esem_diff_configural.dat;/.test(m.split('MODEL:')[0]) && /SAVEDATA:\nDIFFTEST = LongInv_esem_diff_metric.dat;/.test(m), m);
+  check('scalar: every threshold labelled across waves', (sc.match(/\(th\d+_\d+\);/g) || []).length === 48 && /\[a2_t1\$4\] \(th2_4\);/.test(sc) && /\[a2_t2\$4\] \(th2_4\);/.test(sc), (sc.match(/\(th\d+_\d+\);/g) || []).length);
+  check('strict: Time-2 uniquenesses refixed @1', /a1_t2@1; a2_t2@1;/.test(st) && !/a1_t2\*/.test(st), st);
+  check('varcov: Time-2 variances @1 and covariances equated; latent means: Time-2 means @0', /F3-F4@1;/.test(vc) && /F1 WITH F2 \(lcov1\);/.test(vc) && /F3 WITH F4 \(lcov1\);/.test(vc) && /\[F3-F4@0\];/.test(lm), [vc, lm]);
+  check('latent means (last step): no SAVEDATA', !/SAVEDATA/.test(lm));
+  const cc = buildInp(s, 'linv:cfa:configural'), cm = buildInp(s, 'linv:cfa:metric');
+  check('CFA form: BY per factor, loadings labelled from metric, no rotation, THETA, LongInv_cfa_diff_* files', /F1 BY a1_t1\* a2_t1 a3_t1;/.test(cc) && /F3 BY a1_t2\* \(L1_1\);/.test(cm) && !/ROTATION/.test(cc) && /PARAMETERIZATION = THETA;/.test(cc) && /SAVEDATA:\nDIFFTEST = LongInv_cfa_diff_configural.dat;/.test(cc) && /DIFFTEST = LongInv_cfa_diff_configural.dat;/.test(cm.split('MODEL:')[0]), [cc, cm]);
+  const bs = buildInp(s, 'linv:besem:strict'), bc = buildInp(s, 'linv:bcfa:configural');
+  check('bifactor-ESEM form: G blocks with target rotation, G referent second threshold labelled, G means', /ROTATION=TARGET\(ORTHOGONAL\);/.test(bs) && /G1 BY a1_t1 a2_t1/.test(bs) && /\[G1@0\];/.test(bs) && /\[G2\];/.test(bs) && (buildInp(s, 'linv:besem:configural').match(/\$2\] \(th\d+_2\);/g) || []).length === 6, bs);
+  check('bifactor-CFA form: orthogonal within wave, THETA, LongInv_bcfa_diff_*', /G1 WITH F1@0 F2@0;/.test(bc) && /G2 WITH F3@0 F4@0;/.test(bc) && /PARAMETERIZATION = THETA;/.test(bc) && /LongInv_bcfa_diff_configural.dat/.test(bc), bc);
+  check('all four ordinal chains ≤ 90 chars per line at every step', ['esem', 'cfa', 'besem', 'bcfa'].every((mt) => ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'].every((stp) => maxLineLength(buildInp(s, `linv:${mt}:${stp}`)) <= 90)));
+  // validation
+  const mlr = mk([...t1, ...t2]); mlr.estimator = 'MLR';
+  check('MLR with ordinal wave columns → error asking for WLSMV', /THETA and DIFFTEST.*not MLR/.test(validateSpec(mlr).errors.join(' | ')), validateSpec(mlr).errors);
+  const uneven = mk([...t1, ...t2]);
+  uneven.data._matrix = rows.map((r) => { const q = r.slice(); q[7] = q[7] === '5' ? '4' : q[7]; return q; }); // a1_t2 loses its top category
+  check('an item with fewer categories at Time 2 → error naming the pair', /a1_t1 has 5 categories but a1_t2 has 4/.test(validateSpec(uneven).errors.join(' | ')), validateSpec(uneven).errors);
+  const bin = mk([...t1, ...t2]);
+  bin.data._matrix = rows.map((r) => r.map((v, i) => (i === 0 ? v : String(1 + (Number(v) % 2))))); // all items binary
+  check('binary items only → referent error (needs ≥ 3 categories per factor)', /referent item with at least three response categories/.test(validateSpec(bin).errors.join(' | ')), validateSpec(bin).errors);
+}
+
+console.log('\n— ordinal longitudinal fixtures (real Mplus 8.3 runs on the Likert longitudinal simulation) —');
+{
+  const e = parseOut(fx('longcat_esem_metric.out')), c = parseOut(fx('longcat_cfa_scalar.out')), b = parseOut(fx('longcat_besem_metric.out')), k = parseOut(fx('longcat_bcfa_metric.out'));
+  check('ESEM metric: WLSMV, longitudinal/esem, DIFFTEST 19.54 (27), df 216', /WLSMV/.test(e.estimator) && e.invKind === 'longitudinal' && e.invModel === 'esem' && e.invStep === 'Metric (loadings)' && e.diffTest?.df === 27 && Math.abs(e.diffTest.chi2 - 19.543) < 0.01 && e.fit.df === 216, [e.estimator, e.invModel, e.diffTest, e.fit.df]);
+  check('CFA scalar: DIFFTEST 7.04 (33) = the 33 remaining thresholds, df 267', c.invModel === 'cfa' && c.diffTest?.df === 33 && c.fit.df === 267, [c.diffTest, c.fit.df]);
+  check('bifactor-ESEM metric: DIFFTEST (32), df 196; bifactor-CFA metric: DIFFTEST (20), df 220', b.invModel === 'besem' && b.diffTest?.df === 32 && b.fit.df === 196 && k.invModel === 'bcfa' && k.diffTest?.df === 20 && k.fit.df === 220, [b.diffTest, b.fit.df, k.diffTest, k.fit.df]);
+  const tbl = renderInvarianceTable([{ label: 'Metric', parsed: e }], { longitudinal: true });
+  check('invariance table under WLSMV across time: DIFFTEST column, no Satorra–Bentler', /<th>Δχ²<\/th>/.test(tbl) && /DIFFTEST/.test(tbl) && !/Satorra/.test(tbl), tbl.slice(0, 300));
 }
 
 console.log(`\nlongitudinal.test: ${pass} passed, ${fail} failed`);

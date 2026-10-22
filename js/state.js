@@ -34,6 +34,8 @@ export function createModelSpec(data) {
     // Convergence aids (Morin, Hoyle Handbook ch. 27): loosened convergence criterion (his T32
     // remedy) + per-item residual-variance positivity constraints (his footnote-5 Heywood remedy).
     aids: { convergence: false, convergenceValue: 0.005, positiveResiduals: [] },
+    // merged response categories per column: { m3: { '5': 4 } } → DEFINE: IF (m3 EQ 5) THEN m3 = 4;
+    recode: {},
   };
   setFactorCount(spec, 2);
   return spec;
@@ -378,12 +380,12 @@ export function mainItemsForFactor(spec, factorId) {
 
 /** Thresholds per item: categories − 1, counted from the parsed data matrix (distinct non-missing
  *  values — exactly what Mplus will see). `spec.data.nCats` overrides; 5-point Likert fallback. */
-export function thresholdCounts(spec) {
+export function thresholdCounts(spec, items = spec.items) {
   const counts = {};
   const idxOf = {};
   (spec.data.varNames || []).forEach((v, i) => { idxOf[v] = i; });
   const miss = spec.data.missingCode != null && spec.data.missingCode !== '' ? Number(spec.data.missingCode) : null;
-  for (const it of spec.items) {
+  for (const it of items) {
     const explicit = spec.data.nCats?.[it];
     if (explicit >= 2) { counts[it] = explicit - 1; continue; }
     const idx = idxOf[it];
@@ -395,7 +397,7 @@ export function thresholdCounts(spec) {
         if (v == null || v === '' || v === '*') continue;
         const n = Number(String(v).replace(',', '.'));
         if (Number.isNaN(n) || (miss != null && n === miss)) continue;
-        seen.add(n);
+        seen.add(applyRecode(spec.recode?.[it], n));
       }
       counts[it] = Math.max(1, seen.size - 1);
     } else counts[it] = 4;
@@ -425,6 +427,78 @@ export function thresholdReferents(spec, counts, { general = false } = {}) {
     if (gRef) taken.add(gRef); else missing.push('G');
   }
   return { refs: taken, byFactor, gRef, missing };
+}
+
+// ---- Sparse response categories (Morin: a category empty in one group or at one wave breaks WLSMV) ----
+/** Follow a column's merge map (5 → 4 → 3 chains are allowed, bounded). */
+export function applyRecode(map, n) {
+  let x = n;
+  for (let i = 0; i < 6 && map && map[String(x)] != null; i++) x = Number(map[String(x)]);
+  return x;
+}
+/** Merge response category `from` of `column` into `to` (recorded on the spec, emitted as a DEFINE line). */
+export function setMerge(spec, column, from, to) {
+  if (!spec.recode) spec.recode = {};
+  spec.recode[column] = { ...(spec.recode[column] || {}), [String(from)]: Number(to) };
+  return spec;
+}
+export function clearMerge(spec, column, from) {
+  if (!spec.recode?.[column]) return spec;
+  const m = { ...spec.recode[column] };
+  delete m[String(from)];
+  if (Object.keys(m).length) spec.recode[column] = m; else delete spec.recode[column];
+  return spec;
+}
+/** Category counts (after merges) of one column, optionally over a subset of rows. */
+export function categoryCounts(spec, column, rowFilter = null) {
+  const idx = (spec.data.varNames || []).indexOf(column);
+  const m = spec.data._matrix;
+  const out = new Map();
+  if (idx < 0 || !m?.length) return out;
+  const miss = spec.data.missingCode != null && spec.data.missingCode !== '' ? Number(spec.data.missingCode) : null;
+  m.forEach((row, r) => {
+    if (rowFilter && !rowFilter(row, r)) return;
+    const v = row[idx];
+    if (v == null || v === '' || v === '*') return;
+    const n = Number(String(v).replace(',', '.'));
+    if (Number.isNaN(n) || (miss != null && n === miss)) return;
+    const k = applyRecode(spec.recode?.[column], n);
+    out.set(k, (out.get(k) || 0) + 1);
+  });
+  return out;
+}
+/** Categories of ordinal items that are present in some groups (or at one wave) but empty in others — the
+ *  situation WLSMV cannot estimate. Each entry names the columns to merge and a suggested neighbour. */
+export function sparseCategories(spec) {
+  const cat = new Set(spec.data.categorical || []);
+  const out = [];
+  const check = (item, columns, sets) => { // sets: [{ label, counts }]
+    const levels = [...new Set(sets.flatMap((s) => [...s.counts.keys()]))].sort((a, b) => a - b);
+    for (const level of levels) {
+      const present = sets.filter((s) => (s.counts.get(level) || 0) > 0);
+      if (present.length === sets.length || present.length === 0) continue;
+      const others = levels.filter((l) => l !== level);
+      const to = others.filter((l) => l < level).pop() ?? others.find((l) => l > level) ?? null;
+      if (to == null) continue;
+      out.push({ item, columns, level, to, counts: sets.map((s) => ({ label: s.label, n: s.counts.get(level) || 0 })) });
+    }
+  };
+  if (spec.longitudinal?.enabled) {
+    const [w1, w2] = spec.longitudinal.waves;
+    (w1 || []).forEach((a, p) => {
+      const b = w2?.[p];
+      if (!b || !cat.has(a) || !cat.has(b)) return;
+      check(a, [a, b], [{ label: spec.longitudinal.waveLabels?.[0] || 'Time 1', counts: categoryCounts(spec, a) }, { label: spec.longitudinal.waveLabels?.[1] || 'Time 2', counts: categoryCounts(spec, b) }]);
+    });
+  } else if (spec.groups?.enabled && spec.groups.variable && spec.groups.codes?.length > 1) {
+    const gIdx = (spec.data.varNames || []).indexOf(spec.groups.variable);
+    if (gIdx < 0) return out;
+    for (const it of spec.items) {
+      if (!cat.has(it)) continue;
+      check(it, [it], spec.groups.codes.map((c) => ({ label: c.label || String(c.code), counts: categoryCounts(spec, it, (row) => Number(String(row[gIdx]).replace(',', '.')) === Number(c.code)) })));
+    }
+  }
+  return out;
 }
 
 /** Validate identification & sanity. Returns { errors:[], warnings:[] }. */
@@ -462,7 +536,10 @@ export function validateSpec(spec) {
     if ((spec.groups.invariance.sequence?.length || 0) === 0) errors.push('Select at least one invariance step (start with Configural).');
     const catItems = spec.items.filter((it) => spec.data.categorical.includes(it));
     if (catItems.length && catItems.length < spec.items.length) {
-      warnings.push(`Only ${catItems.length} of ${spec.items.length} items are flagged categorical — the invariance sequence assumes one scale type. Flag all items categorical for the thresholds-based WLSMV chain, or none for the intercepts-based chain.`);
+      // mixed indicators: thresholds/THETA for the ordinal items, intercepts for the continuous ones — WLSMV only
+      if (!/MV$/i.test(spec.estimator || '')) errors.push(`Mixed indicators (${catItems.length} ordinal, ${spec.items.length - catItems.length} continuous) run the thresholds/THETA sequence, which Mplus offers for WLSMV, not ${spec.estimator}. Switch the estimator to WLSMV, or unflag the items.`);
+      else if (spec.modelTypes.bifactorEsem) errors.push(`Mixed indicators are generated for the CFA, ESEM and bifactor-CFA sequences; the bifactor-ESEM sequence with mixed indicators is not identified in Mplus (its scalar step has an unidentified factor variance). Uncheck Bifactor-ESEM, or flag all items ordinal or all continuous.`);
+      else warnings.push(`Mixed indicators: the ${catItems.length} ordinal items get thresholds (first thresholds and one referent's second threshold per factor equated from the configural model on), the ${spec.items.length - catItems.length} continuous items get intercepts. Δχ² comes from Mplus DIFFTEST — run the generated models in order, in the same folder.`);
     } else if (catItems.length === spec.items.length && spec.items.length > 0) {
       // the thresholds chain is written with PARAMETERIZATION = THETA and the DIFFTEST handshake, which Mplus
       // provides for the weighted least squares estimators only — refuse rather than emit syntax Mplus rejects
@@ -485,6 +562,9 @@ export function validateSpec(spec) {
     warnings.push('Residual-variance constraints are skipped for categorical items — their residual variance is not a free parameter under the default (DELTA) parameterization.');
   }
 
+  const sparse = sparseCategories(spec);
+  if (sparse.length) errors.push(`${sparse.length === 1 ? 'A response category is' : `${sparse.length} response categories are`} empty in some groups or at one wave but not everywhere (${sparse.slice(0, 3).map((s) => `${s.item} = ${s.level}`).join(', ')}${sparse.length > 3 ? ', …' : ''}) — WLSMV cannot estimate a threshold for them. Merge each into a neighbouring category under “Response categories” below, or treat the items as continuous.`);
+
   if (spec.longitudinal?.enabled) {
     const [w1, w2] = spec.longitudinal.waves;
     if (spec.groups.enabled) errors.push('Run either multi-group or longitudinal invariance, not both at once.');
@@ -492,12 +572,27 @@ export function validateSpec(spec) {
     else if (w1.length !== w2.length) errors.push(`Each wave needs the same number of indicators (Time 1 has ${w1.length}, Time 2 has ${w2.length}).`);
     const overlap = (w1 || []).filter((x) => (w2 || []).includes(x));
     if (overlap.length) errors.push(`Time 1 and Time 2 must use different columns (shared: ${overlap.join(', ')}).`);
-    // The longitudinal builders are the intercept/uniqueness chain for continuous indicators; categorical
-    // items would need thresholds + THETA (Morin's T42–T59 chain), which is not generated — refuse rather
-    // than emit syntax Mplus rejects.
-    const catLong = [...(w1 || []), ...(w2 || [])].filter((v) => spec.data.categorical.includes(v));
-    if (catLong.length) errors.push(`Longitudinal invariance is generated for continuous indicators only; ${catLong.length} selected column${catLong.length > 1 ? 's are' : ' is'} flagged categorical (${catLong.slice(0, 4).join(', ')}${catLong.length > 4 ? ', …' : ''}). Unflag them on the Data step, or test invariance across groups, where the thresholds-based WLSMV chain is available.`);
+    // Ordinal wave columns run the thresholds/THETA chain (Morin's T42–T59 logic across waves): every wave column
+    // must be flagged, the estimator must be WLSMV, each item must carry the same categories at both waves (its
+    // thresholds are equated pairwise) and every factor needs a referent with ≥ 3 categories.
+    const waveCols = [...(w1 || []), ...(w2 || [])];
+    const catLong = waveCols.filter((v) => spec.data.categorical.includes(v));
+    if (catLong.length && catLong.length < waveCols.length) {
+      errors.push(`${catLong.length} of the ${waveCols.length} wave columns are flagged categorical — flag all of them for the thresholds-based (WLSMV) sequence across time, or none for the intercept-based one.`);
+    } else if (catLong.length && w1?.length && w2?.length === w1.length) {
+      if (!/MV$/i.test(spec.estimator || '')) errors.push(`The thresholds-based longitudinal sequence uses PARAMETERIZATION = THETA and DIFFTEST, which Mplus offers for WLSMV, not ${spec.estimator}. Switch the estimator to WLSMV, or unflag the items.`);
+      const c1 = thresholdCounts(spec, w1), c2 = thresholdCounts(spec, w2);
+      const diff = w1.map((it, p) => [it, w2[p]]).filter(([a, b]) => c1[a] !== c2[b]);
+      if (diff.length) errors.push(`${diff.slice(0, 3).map(([a, b]) => `${a} has ${c1[a] + 1} categories but ${b} has ${c2[b] + 1}`).join('; ')}${diff.length > 3 ? '; …' : ''} — an item must show the same categories at both waves for its thresholds to be equated. Collapse the sparse categories on the Model step, or treat the items as continuous.`);
+      const bifactor = !!(spec.modelTypes.bifactorEsem || spec.modelTypes.bifactorCfa);
+      const { missing } = thresholdReferents(spec, c1, { general: bifactor });
+      if (missing.length) {
+        const names = missing.map((id) => (id === 'G' ? 'the general factor' : (spec.factors.find((f) => f.id === id)?.label || id)));
+        errors.push(`Categorical invariance across time needs, for each factor${bifactor ? ' and for the general factor' : ''}, one referent item with at least three response categories — its second threshold is equated across waves to identify the Time-2 latent means (Morin's rule). None is available for ${names.join(', ')}. Add such an item, or treat the items as continuous.`);
+      }
+    }
     if ((spec.longitudinal.invariance.sequence?.length || 0) === 0) errors.push('Select at least one invariance step (start with Configural).');
+    if (spec.modelTypes.bifactorEsem && !spec.aids?.convergence) warnings.push('Bifactor-ESEM across time is the most iteration-hungry family: Morin runs it with the loosened convergence criterion (CONVERGENCE = .005, Syntax step → Convergence aids). Without it, later steps may stop before converging.');
     // the pairing is positional (waves[1][k] re-measures waves[0][k]); catch an id column or a shifted pairing
     for (const it of w2 || []) if (looksLikeId(spec.data, it)) warnings.push(`${it} looks like a case identifier — remove it from Time 2; with it in the list every Time-1/Time-2 pair is shifted.`);
     // only when the names DO carry a wave pairing and the user's pairs do not share one substitution (x1_t1 ↔ x1_t3
