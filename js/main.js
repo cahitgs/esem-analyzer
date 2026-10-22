@@ -3,9 +3,10 @@
 // .inp / .out text opens in the Mplus sheet. Modelling, parsing and export engines are untouched.
 import { $, $$, el, toast, downloadText, downloadSvgAsPng } from './ui.js';
 import { pathDiagramSVG, conceptDiagramSVG } from './diagram.js';
-import { parseDataFile, buildDat } from './data-parse.js';
-import { createModelSpec } from './state.js';
+import { parseNameList, detectMissingCode, detectLikertColumns, distinctValues, parseDataFile, buildDat } from './data-parse.js';
+import { createModelSpec, looksLikeId } from './state.js';
 import { mountModelBuilder } from './model-builder.js';
+import { specSignature, applySavedSpec, saveSpecLocal, loadSpecLocal } from './spec-store.js';
 import { buildInp, requestedModels } from './syntax-generator.js';
 import { parseOut } from './out-parser.js';
 import { parseSvalues, suggestReferents, buildEwcInp, fixedCrossCount } from './ewc.js';
@@ -111,7 +112,7 @@ function renderDataReview(data) {
   $('#data-intake').hidden = true;
   const host = $('#data-review'); host.hidden = false; host.innerHTML = '';
   $('#data-title').textContent = data.fileName || 'Data';
-  $('#data-lead').textContent = 'Columns are read in order. Name them as they should appear in the Mplus NAMES list, flag categorical items, and give the missing-value code.';
+  $('#data-lead').textContent = 'Columns are read in order. Check the names (they become the Mplus NAMES list), flag ordinal items, and declare the missing-value code — the Mplus-ready .dat is written for you.';
 
   const body = el('div', { class: 'cc-body', style: { padding: '0' } });
 
@@ -124,8 +125,10 @@ function renderDataReview(data) {
     ]),
   ], [btn('Different file', { size: 'btn-sm', icon: 'upload', onclick: resetData })]));
 
-  // 2 · variable editor
+  data.missingHint = detectMissingCode(data);
+  // 2 · variable editor — names, ordinal flags; paste a whole name list instead of typing (Morin's request)
   const list = el('div', { class: 'vlist' });
+  const rerender = () => renderDataReview(data);
   data.varNames.forEach((name, i) => {
     list.append(el('div', { class: 'vrow' }, [
       el('span', { class: 'idx' }, String(i + 1)),
@@ -133,17 +136,50 @@ function renderDataReview(data) {
         value: name, class: 'input input-sm mono', 'aria-label': `name of column ${i + 1}`,
         oninput: (e) => { data.varNames[i] = e.target.value.trim() || `V${i + 1}`; },
       }),
-      el('label', { class: 'cat', 'data-tip': 'Treat as categorical (→ WLSMV)' }, [
-        el('input', { type: 'checkbox', class: 'box', onchange: (e) => toggleCategorical(data, name, i, e.target.checked) }),
+      el('label', { class: 'cat', 'data-tip': 'Ordered-categorical item (thresholds, WLSMV)' }, [
+        el('input', { type: 'checkbox', class: 'box', checked: data.categorical.includes(name), onchange: (e) => toggleCategorical(data, name, i, e.target.checked) }),
         'categorical',
       ]),
     ]));
   });
-  const miss = el('div', { class: 'row', style: { marginTop: '14px' } }, [
-    el('label', { for: 'miss', class: 'lbl', style: { margin: '0' } }, 'Missing value code'),
-    el('input', { id: 'miss', placeholder: 'e.g. 999 or .', class: 'input input-sm mono', style: { width: '9rem' }, oninput: (e) => { data.missingCode = e.target.value.trim() || null; } }),
-  ]);
-  body.append(card(2, 'Variables', data.hasHeader ? 'Named from the header row. These names appear in the generated NAMES list.' : 'Name your columns. These names appear in the generated NAMES list.', [list, miss]));
+  const pasteBox = el('div', { hidden: true, style: { marginBottom: '12px' } });
+  const ta = el('textarea', { class: 'input mono', rows: '4', style: { width: '100%', resize: 'vertical' }, placeholder: 'One name per line (the Name column copied from SPSS), or "x1-x12 age sex", or a whole Mplus NAMES ARE … ; line', 'aria-label': 'Variable names to paste' });
+  const pasteNote = el('p', { class: 'small muted', style: { margin: '6px 0 0' } }, `${data.nCols} columns were read; paste exactly that many names.`);
+  pasteBox.append(ta, el('div', { class: 'row', style: { marginTop: '8px' } }, [
+    btn('Apply names', { size: 'btn-sm', kind: 'btn-primary', onclick: () => {
+      const names = parseNameList(ta.value);
+      if (names.length !== data.nCols) { pasteNote.textContent = `${names.length} names found, but the file has ${data.nCols} columns — paste one name per column.`; pasteNote.className = 'small'; pasteNote.style.color = '#7E2519'; return; }
+      const old = data.varNames.slice();
+      data.varNames = names;
+      data.categorical = data.categorical.map((c) => names[old.indexOf(c)]).filter(Boolean);
+      toast(`${names.length} column names applied`, 'ok');
+      rerender();
+    } }),
+    btn('Cancel', { size: 'btn-sm', onclick: () => { pasteBox.hidden = true; } }),
+  ]), pasteNote);
+  const likert = detectLikertColumns(data, { ignore: [data.missingCode, data.missingHint?.code] }).filter((v) => !looksLikeId(data, v));
+  const suggest = likert.length >= 2 && !data.categorical.length
+    ? callout('info', [`${likert.length} columns look like ordinal (Likert) items — integer values with ${Math.max(...likert.map((v) => distinctValues(data, v, 12).length))} levels at most: ${likert.slice(0, 8).join(', ')}${likert.length > 8 ? ', …' : ''}. Flag them categorical and the models use thresholds with WLSMV; leave them unflagged to treat them as continuous (MLR). `,
+      btn('Flag them categorical', { size: 'btn-sm', onclick: () => { data.categorical = likert.slice(); toast(`${likert.length} columns flagged categorical`, 'ok'); rerender(); } })])
+    : null;
+  body.append(card(2, 'Variables', data.hasHeader ? 'Named from the header row. These names become the Mplus NAMES list.' : 'No header row: the columns are V1…Vn. Paste your names below (or export the file again with a first row of names).', [pasteBox, suggest, list].filter(Boolean), [
+    btn('Paste names', { size: 'btn-sm', icon: 'edit', onclick: () => { pasteBox.hidden = !pasteBox.hidden; if (!pasteBox.hidden) ta.focus(); } }),
+    btn('All categorical', { size: 'btn-sm', onclick: () => { data.categorical = data.varNames.filter((v) => !looksLikeId(data, v)); rerender(); } }),
+    btn('None', { size: 'btn-sm', onclick: () => { data.categorical = []; rerender(); } }),
+  ]));
+
+  // 3 · missing values — its own card, with the code detected from the data (Morin lost time here)
+  data.missingHint = detectMissingCode(data);
+  const missInput = el('input', { id: 'miss', value: data.missingCode ?? '', placeholder: 'e.g. 999 or -99', class: 'input input-sm mono', style: { width: '9rem' }, oninput: (e) => { data.missingCode = e.target.value.trim() || null; renderDataBar(); } });
+  const hint = data.missingHint;
+  const missNote = hint && (data.missingCode == null || data.missingCode === '')
+    ? callout('warn', [`${hint.code} appears in ${hint.columns} columns (${hint.cells} cells) and looks like a missing-value code. Without declaring it, Mplus reads it as a real score and the models fail or fit nonsense. `,
+      btn(`Use ${hint.code}`, { size: 'btn-sm', kind: 'btn-primary', onclick: () => { data.missingCode = hint.code; rerender(); } })])
+    : el('p', { class: 'small muted', style: { margin: '0' } }, hint ? `Declared: ${data.missingCode} (seen in ${hint.columns} columns).` : 'Blank cells are written as * for Mplus automatically; a numeric code such as 999 or -99 must be declared here.');
+  body.append(card(3, 'Missing values', 'The code Mplus should treat as missing', [
+    el('div', { class: 'row' }, [el('label', { for: 'miss', class: 'lbl', style: { margin: '0' } }, 'Missing value code'), missInput]),
+    missNote,
+  ]));
 
   // 3 · preview
   const tbl = el('table', { class: 'dtab tnum' });
@@ -153,7 +189,7 @@ function renderDataReview(data) {
   const tb = el('tbody');
   data.preview.forEach((row) => { const tr = el('tr', {}); row.forEach((c) => tr.append(el('td', { class: 'num' }, c))); tb.append(tr); });
   tbl.append(tb);
-  body.append(card(3, 'Preview', `First ${data.preview.length} rows, as read.`, [el('div', { class: 'table-wrap' }, tbl)]));
+  body.append(card(4, 'Preview', `First ${data.preview.length} rows, as read.`, [el('div', { class: 'table-wrap' }, tbl)]));
 
   host.append(body);
   renderDataBar();
@@ -165,6 +201,7 @@ function toggleCategorical(data, name, i, on) {
   const v = data.varNames[i];
   data.categorical = data.categorical.filter((x) => x !== v);
   if (on) data.categorical.push(v);
+  renderDataBar();
 }
 function resetData() {
   $('#data-review').hidden = true; $('#data-intake').hidden = false;
@@ -174,17 +211,30 @@ function resetData() {
   renderDataBar(); renderTrack(); renderPaper();
 }
 function continueToModel() {
-  // de-dup categorical names and finalize estimator default
-  appState.data.categorical = [...new Set(appState.data.categorical)];
-  appState.spec = createModelSpec(appState.data);
-  if (appState.data.categorical.length) appState.spec.estimator = 'WLSMV';
+  const data = appState.data;
+  data.categorical = [...new Set(data.categorical)];
+  const sig = specSignature(data);
+  let restored = null;
+  if (appState.spec && appState.spec.signature === sig) {
+    // same columns: keep the sketch, adopt the Data-step edits (flags, missing code); the estimator follows the flags
+    appState.spec.data = data;
+    if (data.categorical.length && appState.spec.estimator === 'MLR') appState.spec.estimator = 'WLSMV';
+  } else {
+    appState.spec = createModelSpec(data);
+    appState.spec.signature = sig;
+    const saved = loadSpecLocal(data); // the sketch remembered for this file (same name + columns)
+    if (saved) { const r = applySavedSpec(appState.spec, saved); if (r.ok) restored = r; }
+    if (!restored && data.categorical.length) appState.spec.estimator = 'WLSMV';
+  }
   appState.builder = null;
   unlock('model');
   appState.builder = mountModelBuilder($('#model-host'), appState.spec, { onChange: onModelChange, onBack: () => goStep('data') });
+  if (restored) toast(`Your model for ${data.fileName} is back: ${appState.spec.items.length} items, ${appState.spec.factors.length} factors${restored.dropped.length ? ` (${restored.dropped.length} unknown column${restored.dropped.length > 1 ? 's' : ''} dropped)` : ''}`, 'ok');
 }
 
 // ============================ Step 2 · Model ============================
 function onModelChange(ev) {
+  if (appState.spec) saveSpecLocal(appState.spec); // every change is remembered for this data file
   if (ev?.continue) { unlock('syntax'); renderSyntaxStep(); return; }
   if (ev && 'preview' in ev) { appState.previewKey = ev.preview; renderPaper(); }
 }
@@ -615,9 +665,10 @@ function renderResultsOutput() {
       node.append(holder);
       addNode(secId, node);
       dyn?.append(controls);
-      const ewc = renderEwcCard(m, cardNo);
-      if (ewc) { dyn?.append(ewc); cardNo++; }
     });
+    // ESEM-within-CFA follows the retained rotated solution (one panel, a selector when several solutions are present)
+    const ewc = renderEwcPanel(ordered, cardNo);
+    if (ewc) { dyn?.append(ewc); cardNo++; }
     addHtml('prose', `<h3 class="ms-h3">Suggested APA text</h3>${renderProse(single)}`);
   }
 
@@ -630,14 +681,35 @@ function renderResultsOutput() {
 
 // ESEM-within-CFA: when a dropped ESEM/bifactor-ESEM .out carries a SVALUES block, offer to
 // convert its rotated solution into a runnable CFA-syntax model (Morin's referent method).
-function renderEwcCard(m, n) {
-  if (!m.raw) return null;
-  // Every generated model now prints SVALUES; only ROTATED solutions (ESEM / bifactor-ESEM — Mplus lists a
-  // "Rotation" in its summary) can be frozen into an ESEM-within-CFA model. The loadings table's bifactor
-  // verdict is handed over so the card and the table never disagree.
-  if (!m.parsed?.rotation) return null;
+// Every generated model prints SVALUES; only ROTATED solutions (ESEM / bifactor-ESEM — Mplus lists a
+// "Rotation" in its summary) can be frozen into an ESEM-within-CFA model. The loadings table's bifactor
+// verdict is handed over so the card and the table never disagree.
+function ewcModelOf(m) {
+  if (!m.raw || !m.parsed?.rotation) return null;
   const model = parseSvalues(m.raw, { generalFactor: m.parsed.generalFactor ?? null });
-  if (!model.found || model.factors.length < 2) return null;
+  return model.found && model.factors.length >= 2 ? model : null;
+}
+// One panel: the conversion is based on the solution the researcher retains (Morin), not on every rotated
+// output that happens to be present — a selector lists the candidates when there are several.
+function renderEwcPanel(models, n) {
+  const eligible = models.filter((m) => ewcModelOf(m));
+  if (!eligible.length) return null;
+  const want = appState.spec?.rotation?.type || '';
+  let current = eligible.find((m) => !m.parsed.generalFactor && want && new RegExp(want, 'i').test(m.parsed.rotation || '')) || eligible[eligible.length - 1];
+  const holder = el('div');
+  const render = () => { holder.replaceChildren(...ewcCardBody(current, ewcModelOf(current))); };
+  const top = eligible.length > 1
+    ? el('div', { class: 'field' }, [
+      el('label', {}, 'Retained model'),
+      el('select', { class: 'select select-sm', 'aria-label': 'Retained model for the ESEM-within-CFA conversion', onchange: (e) => { current = eligible[Number(e.target.value)] || current; render(); } },
+        eligible.map((m, i) => el('option', { value: String(i), selected: m === current }, m.label))),
+      el('p', { class: 'small muted', style: { margin: '6px 0 0' } }, 'The conversion follows the solution you retain; pick another rotated solution to convert that one instead.'),
+    ])
+    : null;
+  render();
+  return card(n, 'ESEM-within-CFA', eligible.length > 1 ? 'Freeze the retained rotated solution into an equivalent CFA.' : `Freeze the rotated solution of ${current.label} into an equivalent CFA.`, [top, holder].filter(Boolean));
+}
+function ewcCardBody(m, model) {
 
   const refs = { ...suggestReferents(model) };
   const fLabel = (f) => (/^(g|fg)$/i.test(f) ? `${f} (general)` : f);
@@ -718,7 +790,7 @@ function renderEwcCard(m, n) {
   ]));
 
   refresh();
-  return card(n, `ESEM-within-CFA — ${m.label}`, 'Freeze the rotated solution into an equivalent CFA.', body);
+  return body;
 }
 
 /** Path diagram: the figure lives in the paper (holder); its options live in a control card. */

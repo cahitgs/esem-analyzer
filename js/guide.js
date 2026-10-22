@@ -57,7 +57,7 @@ function render() {
   else if (server && h && h.mplus && !h.mplus.checked) { dot = 'run'; text = 'The runner is here and is checking your Mplus installation…'; }
   else if (server && h && h.mplus) { dot = 'bad'; text = `The runner is here but Mplus was not found: ${h.mplus.error || 'see the runner window'}.`; }
   else if (note) { dot = note.tone === 'wait' ? 'run' : 'bad'; text = note.text; }
-  else { text = 'Not connected. Download the runner, double-click it, then press Connect. The browser will ask once whether this page may access your local network: choose Allow.'; }
+  else { text = 'Not connected. Download the runner, double-click it (a console window opens — leave it open, nothing to type there), then press Connect. The browser will ask once whether this page may access your local network: choose Allow.'; }
   if (!server || !ok) {
     actions = [
       el('a', { class: 'btn btn-sm btn-primary', href: EXE, rel: 'noopener' }, [iconEl('download', 15), el('span', { class: 'btn-t' }, 'Download the runner')]),
@@ -84,7 +84,7 @@ function render() {
     el('div', { class: 'g-opts' }, [
       el('div', { class: 'g-card is-main' }, [
         el('div', { class: 'g-card-t' }, ['From the app, on this computer', el('span', { class: 'tag accent' }, 'recommended')]),
-        el('p', {}, 'ESEM-Analyzer.exe (Windows, about 100 MB, no install) finds the Mplus on your computer. Double-click it and it opens its own copy of the app; or keep this page and press Connect, and this page uses the runner on localhost. The Syntax step then shows “Run all in Mplus”, and every output lands in the manuscript by itself.'),
+        el('p', {}, 'ESEM-Analyzer.exe (Windows, about 100 MB, no install) is the runner: double-click it, a small console window opens and finds the Mplus on your computer — leave that window open and type nothing in it. It opens its own copy of the app in your browser; or keep this page and press Connect, and this page uses the runner on localhost. The Syntax step then shows “Run all in Mplus”, and every output lands in the manuscript by itself. Closing the window stops the runner.'),
         el('div', { class: 'g-status' }, [el('span', { class: `mdot ${dot}` }), el('span', {}, text)]),
         actions.length ? el('div', { class: 'row' }, actions) : null,
       ]),

@@ -100,9 +100,9 @@ ES modules.
 ## Desktop runner (one .exe, no Node install)
 
 For colleagues who have Mplus but not Node: `node tools/build-exe.mjs` packages the app and the runner into a single
-Windows executable, `dist/ESEM-Analyzer.exe` (~105 MB; Node is inside). Double-click it: a console window opens,
-the browser opens on `http://localhost:3001` (or the next free port), the topbar shows the Mplus it found, and
-**Run all in Mplus** works with nothing else installed. Runs are written to `mplus-runs/` next to the exe; closing
+Windows executable, `dist/ESEM-Analyzer.exe` (~105 MB; Node is inside). Double-click it: a console window opens (it is the runner —
+leave it open, there is nothing to type in it), the browser opens on `http://localhost:3001` (or the next free port), the
+topbar shows the Mplus it found, and **Run all in Mplus** works with nothing else installed. Runs are written to `mplus-runs/` next to the exe; closing
 the window stops it. The exe is unsigned, so SmartScreen asks once ("More info → Run anyway"). Build on a machine
 with Node 20.12+; the first build fetches `postject` via npx. The runner also answers the online page on
 localhost (CORS for the GitHub Pages origin; `ALLOW_ORIGINS` adds others), so the published UI can drive it.
@@ -114,7 +114,8 @@ back through Mplus 8.3 to confirm it reproduces the intended models (matching de
 
 ```bash
 node test/parser.test.mjs       # .out parser             (68)
-node test/dataparse.test.mjs    # data-file detection     (9)
+node test/dataparse.test.mjs    # data-file detection     (20)
+node test/specstore.test.mjs    # model specification save / restore (.json, localStorage) (14)
 node test/ewc.test.mjs          # ESEM-within-CFA         (52)
 node test/longitudinal.test.mjs # longitudinal invariance (79)
 node test/apa.test.mjs          # Morin-style APA tables   (16)

@@ -452,6 +452,8 @@ export function validateSpec(spec) {
   for (const it of spec.items) if (looksLikeId(spec.data, it)) warnings.push(`${it} looks like a case identifier (unique consecutive integers) — remove it from the items. As an indicator it has no common variance, and the scalar invariance step will not converge.`);
 
   if (spec.estimator === 'WLSMV' && spec.data.categorical.length === 0) warnings.push('WLSMV is selected but no items are flagged categorical.');
+  const hint = spec.data.missingHint;
+  if (hint && (spec.data.missingCode == null || spec.data.missingCode === '')) warnings.push(`${hint.code} appears in ${hint.columns} columns (${hint.cells} cells) and looks like a missing-value code, but none is declared — Mplus would read it as a real score. Set it on the Data step (Missing values card).`);
 
   if (spec.groups.enabled) {
     if (!spec.groups.variable) errors.push('Choose a grouping variable for invariance testing.');

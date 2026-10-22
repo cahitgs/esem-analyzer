@@ -1,10 +1,11 @@
 // model-builder.js — Step 2 UI: factor controls, the Λ target-pattern grid, and the live
 // syntax preview (opened in the Mplus sheet). Mutates the shared ModelSpec via state.js helpers
 // and re-renders; the paper on the right draws the hypothesized model from the same spec.
-import { el, $, $$, toast } from './ui.js';
+import { el, $, $$, toast, downloadText } from './ui.js';
 import { setFactorCount, setItems, setWaveItems, setTime1, toggleTarget, factorIds, validateSpec, guessWaveCounterparts, orderWave2 } from './state.js';
 import { buildInp, requestedModels, INV_SEQUENCE, INV_META } from './syntax-generator.js';
 import { distinctValues } from './data-parse.js';
+import { serializeSpec, applySavedSpec } from './spec-store.js';
 import { ctrlHead, ctrlWrap, card, callout, btn, stepBar, sheet } from './shell.js';
 
 let SPEC = null;
@@ -12,6 +13,7 @@ let onChange = () => {};
 let onBack = () => {};
 let activeKey = null;   // the model whose syntax is previewed and whose structure the paper draws
 let barHost = null;
+let itemMode = 'select'; // 'select' = pick the items; 'ordinal' = mark ordered-categorical items (thresholds, WLSMV)
 
 export function mountModelBuilder(host, spec, opts = {}) {
   SPEC = spec; onChange = opts.onChange || (() => {}); onBack = opts.onBack || (() => {});
@@ -26,8 +28,15 @@ function buildLayout() {
   const head = ctrlHead('Step 2 · Model', 'Sketch the factor pattern', 'Choose the items and factors, mark each item’s target loading in Λ, then pick the rotation, the estimator, and the models to generate.');
   const body = [];
 
-  // 1 · items
-  body.push(card(1, 'Items', 'Variables that load on the factors', [el('div', { id: 'mb-items', class: 'chips' })]));
+  // 1 · items — pick them, or switch the chips to marking ordinal (categorical) items without going back to Data
+  body.push(card(1, 'Items', 'Variables that load on the factors', [
+    el('div', { class: 'row', style: { marginBottom: '10px' } }, [
+      segmented('mb-itemmode', [{ v: 'select', t: 'Select items' }, { v: 'ordinal', t: 'Mark ordinal items' }], itemMode, (v) => { itemMode = v; refresh(); }),
+      el('span', { id: 'mb-itemmode-hint', class: 'small muted' }, ''),
+    ]),
+    el('div', { id: 'mb-items', class: 'chips' }),
+    el('div', { id: 'mb-ordinal-tools', class: 'row', style: { marginTop: '10px' } }),
+  ]));
 
   // 2 · factors
   body.push(card(2, 'Factors', 'How many latent factors, and their labels in the tables', [
@@ -52,6 +61,26 @@ function buildLayout() {
 
   // 6 · measurement invariance
   body.push(card(6, 'Measurement invariance', 'Across groups or time (optional)', [el('div', { id: 'mb-groups' })]));
+
+  // 7 · the sketch as a file — reuse it in another session or on another file with the same columns
+  const loadInput = el('input', { type: 'file', accept: '.json,application/json', hidden: true, onchange: async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    try {
+      const saved = JSON.parse(await f.text());
+      const r = applySavedSpec(SPEC, saved, { withData: true });
+      if (!r.ok) { toast('That file is not an ESEM Analyzer model, or none of its items exist in this data', 'err'); return; }
+      toast(`Model loaded: ${SPEC.items.length} items, ${SPEC.factors.length} factors${r.dropped.length ? ` — ${r.dropped.length} column${r.dropped.length > 1 ? 's' : ''} not in this data dropped (${r.dropped.slice(0, 4).join(', ')}${r.dropped.length > 4 ? ', …' : ''})` : ''}`, r.dropped.length ? 'warn' : 'ok');
+      refresh();
+    } catch (err) { toast('Could not read the model file: ' + err.message, 'err'); }
+    e.target.value = '';
+  } });
+  body.push(card(7, 'Model file', 'Save this sketch to reuse it later or on another file with the same columns; it is also remembered for this data file on this computer', [
+    el('div', { class: 'row' }, [
+      btn('Save model (.json)', { size: 'btn-sm', icon: 'download', onclick: () => { const base = (SPEC.data?.fileName || 'model').replace(/\.[^.]+$/, ''); downloadText(JSON.stringify(serializeSpec(SPEC), null, 2), `${base}-model.json`, 'application/json'); toast('Model saved', 'ok'); } }),
+      btn('Load model', { size: 'btn-sm', icon: 'upload', onclick: () => loadInput.click() }),
+      loadInput,
+    ]),
+  ]));
 
   // validation messages
   body.push(el('div', { id: 'mb-validation', class: 'flex flex-col gap-2' }));
@@ -131,23 +160,43 @@ function gridLegend() {
 
 // ---------- render/update ----------
 function refresh() {
-  // items chips
+  // items chips — selection mode, or ordinal-marking mode (the flags live on the data, shared with the Data step)
   const itemBox = $('#mb-items');
   if (itemBox) {
     itemBox.innerHTML = '';
-    // with time on, this card IS the Time-1 picker: Time 2 follows the change and its columns cannot be picked here
     const timeOn = SPEC.longitudinal.enabled;
-    const inT2 = new Set(timeOn ? SPEC.longitudinal.waves[1] || [] : []);
-    for (const v of SPEC.data.varNames) {
-      const on = SPEC.items.includes(v);
-      const disabled = inT2.has(v);
-      itemBox.append(el('button', {
-        type: 'button', class: 'chip chip-sm mono', disabled, 'aria-pressed': on ? 'true' : 'false',
-        onclick: disabled ? undefined : () => {
-          const next = on ? SPEC.items.filter((x) => x !== v) : SPEC.data.varNames.filter((x) => SPEC.items.includes(x) || x === v);
-          if (next.length >= 1) { if (timeOn) setTime1(SPEC, next); else setItems(SPEC, next); refresh(); }
-        },
-      }, v));
+    const cat = SPEC.data.categorical;
+    const hintEl = $('#mb-itemmode-hint'), toolsEl = $('#mb-ordinal-tools');
+    syncSegmented('mb-itemmode', itemMode);
+    if (itemMode === 'ordinal') {
+      // only the selected items are shown; a filled chip = ordered-categorical (thresholds, WLSMV)
+      const shown = timeOn ? [...SPEC.longitudinal.waves[0], ...SPEC.longitudinal.waves[1]] : SPEC.items;
+      const nCat = shown.filter((v) => cat.includes(v)).length;
+      if (hintEl) hintEl.textContent = `Click an item to mark it ordinal (filled = ordinal, thresholds + WLSMV). ${nCat} of ${shown.length} marked.`;
+      for (const v of shown) {
+        const on = cat.includes(v);
+        itemBox.append(el('button', { type: 'button', class: 'chip chip-sm mono', 'aria-pressed': on ? 'true' : 'false', title: on ? 'ordinal — click to treat as continuous' : 'continuous — click to treat as ordinal', onclick: () => { setCategorical(v, !on); refresh(); } }, v));
+      }
+      if (toolsEl) toolsEl.replaceChildren(
+        btn('All selected → ordinal', { size: 'btn-sm', onclick: () => { for (const v of shown) setCategorical(v, true); refresh(); } }),
+        btn('All → continuous', { size: 'btn-sm', onclick: () => { for (const v of shown) setCategorical(v, false); refresh(); } }),
+      );
+    } else {
+      if (hintEl) hintEl.textContent = cat.length ? `${SPEC.items.filter((v) => cat.includes(v)).length} of ${SPEC.items.length} selected items are ordinal.` : '';
+      if (toolsEl) toolsEl.replaceChildren();
+      // with time on, this card IS the Time-1 picker: Time 2 follows the change and its columns cannot be picked here
+      const inT2 = new Set(timeOn ? SPEC.longitudinal.waves[1] || [] : []);
+      for (const v of SPEC.data.varNames) {
+        const on = SPEC.items.includes(v);
+        const disabled = inT2.has(v);
+        itemBox.append(el('button', {
+          type: 'button', class: 'chip chip-sm mono', disabled, 'aria-pressed': on ? 'true' : 'false',
+          onclick: disabled ? undefined : () => {
+            const next = on ? SPEC.items.filter((x) => x !== v) : SPEC.data.varNames.filter((x) => SPEC.items.includes(x) || x === v);
+            if (next.length >= 1) { if (timeOn) setTime1(SPEC, next); else setItems(SPEC, next); refresh(); }
+          },
+        }, v));
+      }
     }
   }
   // factor count + labels
@@ -172,6 +221,16 @@ function refresh() {
   renderGrid();
   renderValidation();
   updatePreview();
+}
+
+// Flag a column ordered-categorical (or not). The estimator follows: the first ordinal item switches MLR to
+// WLSMV; residual-variance aids drop the item (not a free parameter under the categorical model).
+function setCategorical(v, on) {
+  const cat = SPEC.data.categorical.filter((x) => x !== v);
+  if (on) cat.push(v);
+  SPEC.data.categorical = cat;
+  if (on && SPEC.estimator === 'MLR') { SPEC.estimator = 'WLSMV'; toast('Estimator switched to WLSMV for the ordinal items', 'ok'); }
+  SPEC.aids.positiveResiduals = (SPEC.aids.positiveResiduals || []).filter((it) => !cat.includes(it));
 }
 
 function renderGroups() {

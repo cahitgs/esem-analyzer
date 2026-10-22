@@ -331,7 +331,16 @@ async function main() {
   const server = http.createServer(handler);
   server.listen(PORT, '127.0.0.1', () => {
     const url = `http://localhost:${PORT}`;
-    console.log(`ESEM Analyzer -> ${url}  (${SEA ? 'close this window to stop' : 'Ctrl+C to stop'})`);
+    if (SEA) {
+      console.log('');
+      console.log('  ESEM Analyzer — Mplus runner');
+      console.log(`  The app opens in your browser at ${url} (open that address yourself if it did not).`);
+      console.log('  Leave this window open: it runs Mplus for the app. There is nothing to type here.');
+      console.log('  Close this window to stop the runner.');
+      console.log('');
+    } else {
+      console.log(`ESEM Analyzer -> ${url}  (Ctrl+C to stop)`);
+    }
     if (OPEN) {
       if (process.platform === 'win32') execFile('cmd', ['/c', 'start', '', url], { windowsHide: true });
       else execFile(process.platform === 'darwin' ? 'open' : 'xdg-open', [url]);
