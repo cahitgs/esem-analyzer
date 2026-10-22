@@ -23,6 +23,7 @@ ok('names: one per line', parseNameList('id\nitem1\nitem2\nsex\n').join() === 'i
 ok('names: Mplus NAMES ARE with ranges and semicolon', parseNameList('NAMES ARE id x1-x4 age sex;').join() === 'id,x1,x2,x3,x4,age,sex', parseNameList('NAMES ARE id x1-x4 age sex;'));
 ok('names: commas/tabs, Mplus-safe truncation, duplicates made unique', parseNameList('a,\tb\tverylongname1, verylongname2').join() === 'a,b,verylong,verylon2', parseNameList('a,\tb\tverylongname1, verylongname2'));
 ok('names: item10-item12 range keeps the prefix', parseNameList('item10-item12').join() === 'item10,item11,item12');
+ok('names: a name that starts with a digit or underscore gets a V prefix (Mplus names start with a letter)', parseNameList('1x _y age').join() === 'V1x,V_y,age', parseNameList('1x _y age'));
 
 // missing-value code detection
 const mk = (rows, names) => ({ varNames: names, _matrix: rows.map((r) => r.map(String)) });

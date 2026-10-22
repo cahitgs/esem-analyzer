@@ -324,9 +324,10 @@ async function pickPort(start) {
 
 async function main() {
   const PORT = await pickPort(PREFERRED_PORT);
+  if (SEA) { try { process.title = 'ESEM Analyzer - Mplus runner (leave this window open)'; } catch { /* ignore */ } }
   if (PORT !== PREFERRED_PORT) console.log(`  Note: port ${PREFERRED_PORT} is busy; using ${PORT}.`);
   detectMplus().then(() => {
-    console.log(mplus.ok ? `  Mplus ${mplus.version} → ${mplus.path}` : `  Note: ${mplus.error}`);
+    console.log(mplus.ok ? `  Mplus ${mplus.version} found -> ${mplus.path}` : `  Note: ${mplus.error}`);
   });
   const server = http.createServer(handler);
   server.listen(PORT, '127.0.0.1', () => {

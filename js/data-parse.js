@@ -102,7 +102,7 @@ const TR_MAP = { 'ç': 'c', 'Ç': 'C', 'ğ': 'g', 'Ğ': 'G', 'ı': 'i', 'İ': 'I
 // to their ASCII equivalents (İ→I, Ş→S, …) rather than dropping them, so names stay readable.
 export function sanitizeName(s) {
   const ascii = s.replace(/[çÇğĞıİöÖşŞüÜ]/g, (m) => TR_MAP[m]);
-  return ascii.replace(/[^A-Za-z0-9_]/g, '_').replace(/^(\d)/, '_$1').slice(0, 8) || 'V';
+  return ascii.replace(/[^A-Za-z0-9_]/g, '_').replace(/^([^A-Za-z])/, 'V$1').slice(0, 8) || 'V'; // Mplus names start with a letter
 }
 
 /** Ensure 8-char-truncated names are unique (duplicates would break the Mplus NAMES list). */

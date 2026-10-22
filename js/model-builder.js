@@ -2,7 +2,7 @@
 // syntax preview (opened in the Mplus sheet). Mutates the shared ModelSpec via state.js helpers
 // and re-renders; the paper on the right draws the hypothesized model from the same spec.
 import { el, $, $$, toast, downloadText } from './ui.js';
-import { setFactorCount, setItems, setWaveItems, setTime1, toggleTarget, factorIds, validateSpec, guessWaveCounterparts, orderWave2, sparseCategories, setMerge, clearMerge, categoryCounts } from './state.js';
+import { setFactorCount, setItems, setWaveItems, setTime1, toggleTarget, factorIds, validateSpec, guessWaveCounterparts, orderWave2, sparseCategories, setMerge, clearMerge, categoryCounts, looksLikeId } from './state.js';
 import { buildInp, requestedModels, INV_SEQUENCE, INV_META } from './syntax-generator.js';
 import { distinctValues } from './data-parse.js';
 import { serializeSpec, applySavedSpec } from './spec-store.js';
@@ -276,7 +276,7 @@ function renderGroups() {
 function renderGroupsMode(host) {
   const avail = SPEC.data.varNames.filter((v) => !SPEC.items.includes(v));
   if (!avail.length) { host.append(el('div', { class: 'mt-3' }, callout('err', 'Leave a variable unselected as items to use it for grouping.'))); return; }
-  if (!SPEC.groups.variable) pickGroupVar(avail[0]);
+  if (!SPEC.groups.variable) pickGroupVar(defaultGroupVar(avail));
   const sel = el('select', { class: 'select select-sm mono', onchange: (e) => { pickGroupVar(e.target.value); refresh(); } },
     avail.map((v) => el('option', { value: v, selected: v === SPEC.groups.variable }, v)));
   host.append(el('div', { class: 'field mt-3' }, [el('label', {}, 'Grouping variable'), sel]));
@@ -366,8 +366,14 @@ function setInvMode(mode) {
     SPEC.longitudinal.enabled = false;
     SPEC.groups.enabled = true;
     const avail = SPEC.data.varNames.filter((v) => !SPEC.items.includes(v));
-    if (!SPEC.groups.variable && avail.length) pickGroupVar(avail[0]);
+    if (!SPEC.groups.variable && avail.length) pickGroupVar(defaultGroupVar(avail));
   }
+}
+// The grouping variable defaults to the last unused column that looks like a group code (2–12 distinct values,
+// not an id), e.g. a trailing sex / school column — never the id column that used to be picked first.
+function defaultGroupVar(avail) {
+  const codeLike = avail.filter((v) => !looksLikeId(SPEC.data, v) && (() => { const n = distinctValues(SPEC.data, v, 13).length; return n >= 2 && n <= 12; })());
+  return codeLike[codeLike.length - 1] || avail[0];
 }
 function pickGroupVar(v) {
   SPEC.groups.variable = v;
