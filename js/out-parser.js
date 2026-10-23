@@ -106,6 +106,14 @@ export function parseOut(text) {
   const ec = text.match(/Group\s+(\d+)\s+does not contain all values of categorical variable:\s*(\w+)/i);
   res.emptyCategory = ec ? { group: Number(ec[1]), variable: ec[2] } : null;
   if (res.emptyCategory) res.warnings.push(`Group ${res.emptyCategory.group} has no observations in a response category of ${res.emptyCategory.variable} — merge that category into its neighbour (Model step, Response categories) and run again.`);
+  // An input error stops Mplus before estimation: "*** ERROR" followed by the message (one or more lines)
+  const errAt = lines.findIndex((l) => /^\*\*\* ERROR/.test(l));
+  if (errAt >= 0) {
+    const msg = [];
+    for (let i = errAt + 1; i < lines.length && msg.length < 4; i++) { const t = lines[i].trim(); if (!t) { if (msg.length) break; continue; } msg.push(t); }
+    res.inputError = msg.join(' ') || 'see the .out';
+    if (!res.emptyCategory) res.warnings.push(`Mplus stopped on an input error: ${res.inputError}`);
+  } else res.inputError = null;
   res.rotationFailed = /NO CONVERGENCE IN ROTATION ALGORITHM|PROBLEM OCCURRED IN THE ROTATION ALGORITHM/i.test(text);
   if (res.rotationFailed) res.warnings.push('The rotation algorithm did not converge — Mplus reports the unrotated solution and no fit statistics.');
 

@@ -5,7 +5,7 @@
 //   CFA:          (no ROTATION)                      MODEL: Fj BY <its main items>;
 // Mplus truncates input lines > 90 chars, so token lists are wrapped < 88.
 
-import { factorIds, mainItemsForFactor, waveCounterpart, DEFAULT_OUTPUT_LINE, thresholdCounts, thresholdReferents } from './state.js';
+import { factorIds, mainItemsForFactor, waveCounterpart, DEFAULT_OUTPUT_LINE, thresholdCounts, thresholdReferents, groupLabels } from './state.js';
 
 const WRAP = 86;
 
@@ -100,7 +100,8 @@ function headerBlocks(spec, { rotation, rotationOverride, iterations, useVars, p
   // bifactor) are estimated on the total sample even when grouping is on, and the longitudinal models are
   // single-group by construction.
   if (grouping && spec.groups?.enabled && spec.groups.variable) {
-    const codes = spec.groups.codes.map((c) => `${c.code} = ${c.label}`).join(' ');
+    const gl = groupLabels(spec);
+    const codes = spec.groups.codes.map((c) => `${c.code} = ${gl.get(String(c.code))}`).join(' ');
     lines.push(`GROUPING IS ${spec.groups.variable} (${codes});`);
   }
   // DEFINE: merged response categories (a category empty in one group or at one wave collapsed into its
@@ -170,6 +171,10 @@ function outputBlock(spec, { svalues = false } = {}) {
 }
 
 function titleLine(text) { return ['TITLE:', text]; }
+/** " [Time 1]" on the single-group measurement models when they are estimated on the Time-1 indicators of a longitudinal design. */
+function waveTitleTag(spec) {
+  return spec.longitudinal?.enabled && spec.longitudinal.waves?.[0]?.length ? ` [${spec.longitudinal.waveLabels?.[0] || 'Time 1'}]` : '';
+}
 
 // Morin's standardized-factor identification: free the first loading (*) and fix the factor
 // variance to 1, instead of Mplus's default marker (first loading fixed to 1). This keeps the
@@ -193,7 +198,7 @@ function esemByBlocks(spec, tag) {
 function buildCFA(spec) {
   const ids = factorIds(spec);
   const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
-  const lines = [...titleLine(`CFA - ${spec.factors.length} factors`), ...headerBlocks(spec, { rotation: false }), 'MODEL:'];
+  const lines = [...titleLine(`CFA - ${spec.factors.length} factors${waveTitleTag(spec)}`), ...headerBlocks(spec, { rotation: false }), 'MODEL:'];
   for (const f of spec.factors) lines.push(cfaByLine(f.id, mainItemsForFactor(spec, f.id)));
   lines.push(`${range}@1;`); // fix factor variances to 1 (first loading freed above)
   const aid = residualAidLines(spec);
@@ -208,7 +213,7 @@ function buildESEMGeomin(spec) {
   const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
   const aid = residualAidLines(spec);
   const lines = [
-    ...titleLine(`ESEM (Geomin ${spec.rotation.oblique ? 'oblique' : 'orthogonal'}) - ${ids.length} factors`),
+    ...titleLine(`ESEM (Geomin ${spec.rotation.oblique ? 'oblique' : 'orthogonal'}) - ${ids.length} factors${waveTitleTag(spec)}`),
     ...headerBlocks(spec, { rotation: true }), 'MODEL:',
     stmt([`${range} BY`, ...spec.items, '(*1)']),
     ...aid.labels, ...aid.constraint,
@@ -220,7 +225,7 @@ function buildESEMGeomin(spec) {
 // ---------- ESEM (Target) ----------
 function buildESEMTarget(spec) {
   const lines = [
-    ...titleLine(`ESEM (Target ${spec.rotation.oblique ? 'oblique' : 'orthogonal'}) - ${spec.factors.length} factors`),
+    ...titleLine(`ESEM (Target ${spec.rotation.oblique ? 'oblique' : 'orthogonal'}) - ${spec.factors.length} factors${waveTitleTag(spec)}`),
     ...headerBlocks(spec, { rotation: true }), 'MODEL:',
   ];
   for (const f of spec.factors) {
@@ -242,7 +247,7 @@ function orthogonalityLines(ids) {
 function buildBifactorCfa(spec) {
   const ids = factorIds(spec);
   const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
-  const lines = [...titleLine(`Bifactor-CFA - ${spec.factors.length} specific factors`), ...headerBlocks(spec, { rotation: false }), 'MODEL:'];
+  const lines = [...titleLine(`Bifactor-CFA - ${spec.factors.length} specific factors${waveTitleTag(spec)}`), ...headerBlocks(spec, { rotation: false }), 'MODEL:'];
   lines.push(cfaByLine('G', spec.items));                                  // general factor on all items
   for (const f of spec.factors) lines.push(cfaByLine(f.id, mainItemsForFactor(spec, f.id)));
   lines.push(`G@1;`, `${range}@1;`);                                       // fix all factor variances to 1
@@ -261,7 +266,7 @@ function buildBifactorEsem(spec) {
   const aid = residualAidLines(spec);
   if (spec.rotation.type === 'TARGET') {
     const lines = [
-      ...titleLine(`Bifactor-ESEM (target orthogonal) - ${spec.factors.length} specific factors`),
+      ...titleLine(`Bifactor-ESEM (target orthogonal) - ${spec.factors.length} specific factors${waveTitleTag(spec)}`),
       ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);' }), 'MODEL:',
       stmt(['G BY', ...spec.items, '(*1)']),
     ];
@@ -274,7 +279,7 @@ function buildBifactorEsem(spec) {
   const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
   const eps = fmtEpsilon(spec.rotation.epsilon).replace(/^,\s*/, ' ');     // "BI-GEOMIN(ORTHOGONAL .5)"
   const lines = [
-    ...titleLine(`Bifactor-ESEM (BI-GEOMIN orthogonal) - ${spec.factors.length} specific factors`),
+    ...titleLine(`Bifactor-ESEM (BI-GEOMIN orthogonal) - ${spec.factors.length} specific factors${waveTitleTag(spec)}`),
     ...headerBlocks(spec, { rotationOverride: `ROTATION=BI-GEOMIN(ORTHOGONAL${eps});` }), 'MODEL:',
     stmt([`G ${range} BY`, ...spec.items, '(*1)']),
     ...aid.labels, ...aid.constraint,
@@ -331,7 +336,7 @@ function buildInvariance(spec, step) {
   // ESEM measurement invariance is iteration-heavy (rotation re-estimated under cross-group
   // constraints); raise the optimizer cap so complex models (many factors/items) still converge.
   const lines = [...titleLine(`MG invariance - ${INV_META[step].label}`), ...headerBlocks(spec, { rotation: true, iterations: 10000, grouping: true }), 'MODEL:', ...main];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
+  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
   lines.push(...outputBlock(spec));
   return lines.join('\n') + '\n';
 }
@@ -415,7 +420,7 @@ function buildInvarianceCategorical(spec, step) {
     ...headerBlocks(spec, { rotation: true, parameterization: 'THETA', difftestIn, grouping: true }),
     'MODEL:', ...main,
   ];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
+  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
   lines.push(...outputBlock(spec));
   if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
   return lines.join('\n') + '\n';
@@ -468,7 +473,7 @@ function buildInvarianceBifactorEsem(spec, step) {
     ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', iterations: 100000, grouping: true }),
     'MODEL:', ...main,
   ];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
+  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
   lines.push(...outputBlock(spec));
   return lines.join('\n') + '\n';
 }
@@ -525,7 +530,7 @@ function buildInvarianceBifactorEsemCategorical(spec, step) {
     ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', parameterization: 'THETA', iterations: 100000, difftestIn, grouping: true }),
     'MODEL:', ...main,
   ];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
+  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
   lines.push(...outputBlock(spec));
   if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
   return lines.join('\n') + '\n';
@@ -584,7 +589,7 @@ function buildInvarianceCfaFamily(spec, step, bifactor) {
   }
 
   const lines = [...titleLine(`MG invariance (${title}) - ${INV_META[step].label}`), ...headerBlocks(spec, { rotation: false, iterations, grouping: true }), 'MODEL:', ...main];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
+  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
   lines.push(...outputBlock(spec));
   return lines.join('\n') + '\n';
 }
@@ -621,7 +626,7 @@ function buildInvarianceCfaFamilyCategorical(spec, step, bifactor) {
     ...headerBlocks(spec, { rotation: false, parameterization: 'THETA', iterations, difftestIn, grouping: true }),
     'MODEL:', ...main,
   ];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
+  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
   lines.push(...outputBlock(spec));
   if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
   return lines.join('\n') + '\n';
@@ -701,7 +706,7 @@ function buildInvarianceMixed(spec, step, fam) {
   const difftestIn = chained && pos > 0 ? diffTestName(seq[pos - 1], F.diffPrefix) : null;
   const difftestOut = chained && pos >= 0 && pos < seq.length - 1 ? diffTestName(step, F.diffPrefix) : null;
   const lines = [...titleLine(`${F.title} - ${INV_META[step].label}`), ...headerBlocks(spec, { ...F.header, parameterization: 'THETA', difftestIn, grouping: true }), 'MODEL:', ...main];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${code.label}:`, ...grp); }
+  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
   lines.push(...outputBlock(spec));
   if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
   return lines.join('\n') + '\n';
@@ -753,17 +758,32 @@ function longInterceptMeanLines(t1, t2, t1r, t2r, meanFix) {
   ];
 }
 
+// One wave's ESEM target blocks — F<fBase+j> BY <main items> <other items>~0 (*t<w>); the Time-2 main items are the
+// wave counterparts of the Time-1 pattern. Under Geomin the wave is one "F1-Fk BY items" line instead; writing the
+// Geomin shorthand under ROTATION = TARGET leaves the rotation unidentified ("Fewer than 6 loadings have been given
+// target values in EFA set", no standard errors), so the two rotations must write different blocks.
+function waveTargetBlocks(spec, items, fBase, tag) {
+  const [t1] = spec.longitudinal.waves;
+  return spec.factors.map((fac, fi) => {
+    const mains = new Set(mainItemsForFactor(spec, fac.id).map((it) => (items === t1 ? it : waveCounterpart(spec, it))));
+    return stmt([`F${fBase + fi} BY`, ...items.map((it) => (mains.has(it) ? it : `${it}~0`)), tag]);
+  });
+}
+
 function buildLongInvarianceESEM(spec, step) {
   const [t1, t2] = spec.longitudinal.waves;
   const k = spec.factors.length;
   const { t1: t1r, t2: t2r } = longRanges(k);
   const f = longFlags(step);
+  const flag = (w) => `(*${w}${f.equate ? ' 1' : ''})`;
+  const by = spec.rotation.type === 'TARGET'
+    ? [...waveTargetBlocks(spec, t1, 1, flag('t1')), ...waveTargetBlocks(spec, t2, k + 1, flag('t2'))]
+    : [stmt([`${t1r} BY`, ...t1, flag('t1')]), stmt([`${t2r} BY`, ...t2, flag('t2')])];
   const lines = [
     ...titleLine(`Longitudinal invariance - ${INV_META[step].label}`),
     ...headerBlocks(spec, { rotation: true, iterations: 10000, useVars: [...t1, ...t2] }),
     'MODEL:',
-    stmt([`${t1r} BY`, ...t1, `(*t1${f.equate ? ' 1' : ''})`]),
-    stmt([`${t2r} BY`, ...t2, `(*t2${f.equate ? ' 1' : ''})`]),
+    ...by,
   ];
   if (f.residuals) { lines.push(chunkLabeled(t1, 'u', false)); lines.push(chunkLabeled(t2, 'u', false)); }
   if (f.varcov) { lines.push(`${t2r}@1;`); lines.push(...longCovLabels(k)); } // T1 vars @1 by ESEM default
@@ -1037,7 +1057,13 @@ export function requestedModels(spec) {
     if (spec.modelTypes.bifactorCfa) want.push('bcfa');
     if (spec.modelTypes.bifactorEsem) want.push('besem');
     if (!want.length) want.push('esem');
+    // the checked measurement models on the Time-1 indicators first (Morin's Table 1: "Time 1 only"), then the chains
+    const w1 = spec.longitudinal.waveLabels?.[0] || 'Time 1';
     const out = [];
+    if (spec.modelTypes.cfa) out.push({ key: 'cfa', label: `CFA · ${w1}`, file: `CFA_${spec.factors.length}f.inp` });
+    if (spec.modelTypes.esem) out.push({ key: 'esem', label: `ESEM (${spec.rotation.type === 'TARGET' ? 'Target' : 'Geomin'}) · ${w1}`, file: `ESEM_${spec.rotation.type.toLowerCase()}_${spec.factors.length}f.inp` });
+    if (spec.modelTypes.bifactorCfa) out.push({ key: 'bifactorCfa', label: `Bifactor-CFA · ${w1}`, file: `BifactorCFA_${spec.factors.length}s.inp` });
+    if (spec.modelTypes.bifactorEsem) out.push({ key: 'bifactorEsem', label: `Bifactor-ESEM · ${w1}`, file: `BifactorESEM_${spec.factors.length}s.inp` });
     for (const mt of want) seq.forEach((step, i) => out.push({
       key: `linv:${mt}:${step}`, step, modelType: mt,
       label: `${MT_LABEL[mt]} · ${INV_META[step].label}`,

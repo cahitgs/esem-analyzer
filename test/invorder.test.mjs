@@ -122,6 +122,13 @@ const seOnly = { label: 'SE-only', parsed: { ...okEsem.parsed, fit: {}, seComput
 ok('reason: standard errors could not be computed', noFitReason(seOnly.parsed) === 'standard errors could not be computed' && /could not be estimated \(standard errors could not be computed\)/.test(renderProse([seOnly])));
 const bare = { label: 'Bare', parsed: { ...okEsem.parsed, fit: {} } };
 ok('reason fallback: no fit statistics reported', noFitReason(bare.parsed) === 'no fit statistics reported');
+{
+  // a real run in which a group label with a space broke the GROUPING line: Mplus stops on an input error
+  const bad = parseOut(fx('mg_grouplabel_error.out'));
+  ok('fixture: an Mplus input error is read from the *** ERROR block', bad.inputError === 'Grouping label has no corresponding value: 1' && !bad.converged, bad.inputError);
+  ok('reason: the input error, not "did not converge"', noFitReason(bad) === 'Mplus input error — Grouping label has no corresponding value: 1', noFitReason(bad));
+  ok('warning carries the message', bad.warnings.some((w) => /input error: Grouping label/.test(w)), bad.warnings);
+}
 const llOnly = { label: 'CFA (MLR, categorical)', parsed: { ...okEsem.parsed, fit: { logLik: -1234.5, aic: 2500.1, bic: 2600.2 } } };
 ok('loglikelihood-only output counts as estimated', noFitReason(llOnly.parsed) === null);
 const prLL = renderProse([llOnly]);

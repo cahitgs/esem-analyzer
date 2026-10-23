@@ -7,7 +7,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parseOut } from '../js/out-parser.js';
-import { renderLoadingsTable } from '../js/apa-render.js';
+import { renderLoadingsTable, renderFitTable, fitFamily, fitComparisons } from '../js/apa-render.js';
+import { buildWordHtml } from '../js/docx-export.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fx = (name) => readFileSync(join(HERE, 'fixtures', name), 'utf8');
@@ -48,6 +49,32 @@ check('bifactor table: orthogonal → factor correlations omitted', !bsHtml.incl
 check('bifactor table: G ω rides the last block row', /<tr><td>ω<\/td><td>\.782<\/td><td><\/td><td><\/td><td>\.456<\/td><td><\/td><\/tr>/.test(bsHtml), null);
 check('bifactor table: G loadings bold (target class)', /class="target">\.116/.test(bsHtml), null);
 check('block rules between subscales', (bsHtml.match(/grp-rule/g) || []).length >= 2, null);
+
+console.log('\n— the four-model fit table: Morin’s reference comparisons —');
+{
+  const four = [
+    { label: 'CFA', parsed: parseOut(fx('cfa_data1.out')) },
+    { label: 'ESEM (Target)', parsed: parseOut(fx('esem_target_data1.out')) },
+    { label: 'Bifactor-CFA', parsed: parseOut(fx('bcfa_data1.out')) },
+    { label: 'Bifactor-ESEM', parsed: parseOut(fx('besem_target_data1.out')) },
+  ];
+  const fam = four.map((m) => fitFamily(m.parsed));
+  check('families read from the outputs (rotation → ESEM, general factor → bifactor)', fam.join() === 'cfa,esem,bcfa,besem', fam);
+  const cmp = fitComparisons(four);
+  check('reference mode: ESEM and bifactor-CFA vs CFA, bifactor-ESEM vs ESEM; Δχ² only for the nested pair', cmp.mode === 'reference' && JSON.stringify(cmp.rows) === JSON.stringify([{ ref: null, nested: false }, { ref: 0, nested: true }, { ref: 0, nested: false }, { ref: 1, nested: false }]), cmp);
+  const html = renderFitTable(four);
+  check('fixtures reproduce Morin (2023) Table 1: χ²(df) = 4212.95 (51), 50.52 (33), 2709.33 (42), 23.23 (24)',
+    /<td>4212\.95<\/td><td>51<\/td>/.test(html) && /<td>50\.52<\/td><td>33<\/td>/.test(html) && /<td>2709\.33<\/td><td>42<\/td>/.test(html) && /<td>23\.23<\/td><td>24<\/td>/.test(html), html.match(/<td>[\d.]+<\/td><td>\d+<\/td>/g));
+  const rows = html.split('<tr>').slice(2);
+  check('ESEM row: vs. CFA with a Satorra–Bentler Δχ²(s) on 18 df', /<td>CFA<\/td><td>[\d.]+\*<\/td><td>18<\/td>/.test(rows[1]), rows[1]);
+  check('bifactor-CFA row: vs. CFA, no Δχ² (not nested) but ΔCFI/ΔTLI/ΔRMSEA', /<td>CFA<\/td><td>—<\/td><td>—<\/td><td>[+−]\.\d{3}<\/td><td>[+−]\.\d{3}<\/td><td>[+−]\.\d{3}<\/td>/.test(rows[2]), rows[2]);
+  check('bifactor-ESEM row: vs. ESEM (Target), no Δχ²', /<td>ESEM \(Target\)<\/td><td>—<\/td><td>—<\/td>/.test(rows[3]), rows[3]);
+  check('note explains the reference comparisons and the nested pairs', /reference model/.test(html) && /nested pairs/.test(html));
+  const two = renderFitTable([four[0], { label: 'CFA 2-factor', parsed: four[0].parsed }]);
+  check('two models of one family keep the row-by-row Δ (no vs. column)', !/<th>vs\.<\/th>/.test(two) && /<th>Δχ²\(s\)<\/th>/.test(two) && /<td>CFA 2-factor<\/td><td>[\d.]+<\/td>/.test(two), two.slice(-400));
+  const w = buildWordHtml(four);
+  check('Word export shows the same vs. column and note', /<th[^>]*>vs\.<\/th>/.test(w) && /reference model/.test(w), w.slice(0, 200));
+}
 
 console.log(`\napa.test: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

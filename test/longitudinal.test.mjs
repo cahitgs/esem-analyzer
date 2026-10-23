@@ -37,9 +37,19 @@ function makeSpec() {
 console.log('\n— requestedModels (longitudinal, ESEM + CFA) —');
 const spec = makeSpec();
 const models = requestedModels(spec);
-check('12 models (6 ESEM + 6 CFA)', models.length === 12, models.length);
-check('keys are linv:<mt>:<step>', models.every((m) => /^linv:(esem|cfa):/.test(m.key)), models[0]?.key);
-check('files LongInv_*', models.every((m) => /^LongInv_(esem|cfa)_\d_/.test(m.file)), models[0]?.file);
+check('14 models: the CFA and ESEM on the Time-1 indicators, then 6 ESEM + 6 CFA chain steps', models.length === 14 && models.slice(0, 2).map((m) => m.key).join() === 'cfa,esem' && models.slice(2).length === 12, models.map((m) => m.key));
+check('Time-1 measurement models are labelled with the wave and titled "[Time 1]"', /· Time 1$/.test(models[0].label) && /^TITLE:\nCFA - 2 factors \[Time 1\]$/m.test(buildInp(spec, 'cfa')), [models[0].label, buildInp(spec, 'cfa').split('\n').slice(0, 2)]);
+check('chain keys are linv:<mt>:<step>', models.slice(2).every((m) => /^linv:(esem|cfa):/.test(m.key)), models[2]?.key);
+check('chain files LongInv_*', models.slice(2).every((m) => /^LongInv_(esem|cfa)_\d_/.test(m.file)), models[2]?.file);
+{
+  // target rotation across time: per-factor blocks with ~0 on the non-target items of each wave (the Geomin shorthand
+  // under ROTATION = TARGET leaves the rotation unidentified in Mplus)
+  const ts = JSON.parse(JSON.stringify(spec)); ts.rotation = { type: 'TARGET', oblique: true, epsilon: 0.5 };
+  const tc = buildInp(ts, 'linv:esem:configural'), tm = buildInp(ts, 'linv:esem:metric');
+  check('target configural: F1 BY X1 X2 X3 X4~0 X5~0 X6~0 (*t1) and F3 BY Y1 Y2 Y3 Y4~0 … (*t2)', /F1 BY X1 X2 X3 X4~0 X5~0 X6~0 \(\*t1\);/.test(tc) && /F2 BY X1~0 X2~0 X3~0 X4 X5 X6 \(\*t1\);/.test(tc) && /F3 BY Y1 Y2 Y3 Y4~0 Y5~0 Y6~0 \(\*t2\);/.test(tc) && /F4 BY Y1~0 Y2~0 Y3~0 Y4 Y5 Y6 \(\*t2\);/.test(tc) && !/F1-F2 BY/.test(tc) && /ROTATION=TARGET\(OBLIQUE\);/.test(tc), tc);
+  check('target metric: the same blocks with the equality flag (*t1 1)/(*t2 1)', /F1 BY X1 X2 X3 X4~0 X5~0 X6~0 \(\*t1 1\);/.test(tm) && /F4 BY Y1~0 Y2~0 Y3~0 Y4 Y5 Y6 \(\*t2 1\);/.test(tm), tm);
+  check('Geomin keeps the one-line set per wave', /F1-F2 BY X1 X2 X3 X4 X5 X6 \(\*t1\);/.test(buildInp(spec, 'linv:esem:configural')));
+}
 
 console.log('\n— ESEM generator tokens —');
 const gen = (mt, step) => buildInp(spec, `linv:${mt}:${step}`);
@@ -107,8 +117,8 @@ console.log('\n— bifactor-ESEM longitudinal generator (Morin Ch27 T28–T41) �
   const s = makeLongNameSpec();
   s.modelTypes = { cfa: false, esem: false, bifactorCfa: false, bifactorEsem: true };
   const models = requestedModels(s);
-  check('besem: 6 models with linv:besem keys', models.length === 6 && models.every((m) => /^linv:besem:/.test(m.key)), models.map((m) => m.key));
-  check('besem: files LongInv_besem_*', models.every((m) => /^LongInv_besem_\d_/.test(m.file)), models[0]?.file);
+  check('besem: the Time-1 bifactor-ESEM then 6 models with linv:besem keys', models.length === 7 && models[0].key === 'bifactorEsem' && models.slice(1).every((m) => /^linv:besem:/.test(m.key)), models.map((m) => m.key));
+  check('besem: files LongInv_besem_*', models.slice(1).every((m) => /^LongInv_besem_\d_/.test(m.file)), models[1]?.file);
   const bc = buildInp(s, 'linv:besem:configural'), bm = buildInp(s, 'linv:besem:metric'),
     bv = buildInp(s, 'linv:besem:varcov'), bl = buildInp(s, 'linv:besem:latentmean');
   check('besem uses TARGET(ORTHOGONAL) + high iterations', /ROTATION=TARGET\(ORTHOGONAL\);/.test(bc) && /ITERATIONS = 100000;/.test(bc), null);
@@ -196,7 +206,7 @@ console.log('\n— bifactor-CFA longitudinal generator (linv:bcfa:) —');
   const s = makeSpec();
   s.modelTypes = { cfa: false, esem: false, bifactorCfa: true, bifactorEsem: false };
   const models = requestedModels(s);
-  check('bcfa: 6 models with linv:bcfa keys, LongInv_bcfa_* files, Bifactor-CFA labels', models.length === 6 && models.every((m) => /^linv:bcfa:/.test(m.key) && /^LongInv_bcfa_\d_/.test(m.file) && /^Bifactor-CFA · /.test(m.label)), models.map((m) => [m.key, m.file, m.label]));
+  check('bcfa: the Time-1 bifactor-CFA then 6 models with linv:bcfa keys, LongInv_bcfa_* files, Bifactor-CFA labels', models.length === 7 && models[0].key === 'bifactorCfa' && models.slice(1).every((m) => /^linv:bcfa:/.test(m.key) && /^LongInv_bcfa_\d_/.test(m.file) && /^Bifactor-CFA · /.test(m.label)), models.map((m) => [m.key, m.file, m.label]));
   const bc = buildInp(s, 'linv:bcfa:configural'), bm = buildInp(s, 'linv:bcfa:metric'), bs = buildInp(s, 'linv:bcfa:scalar'), bv = buildInp(s, 'linv:bcfa:varcov'), bl = buildInp(s, 'linv:bcfa:latentmean');
   check('bcfa configural: G1/G2 on every wave item, specific factors, orthogonal within wave, T2 variances @1', /G1 BY X1\* X2 X3 X4 X5 X6;/.test(bc) && /G2 BY Y1\* Y2 Y3 Y4 Y5 Y6;/.test(bc) && /F3 BY Y1\* Y2 Y3;/.test(bc) && /G1 WITH F1@0 F2@0;/.test(bc) && /G2 WITH F3@0 F4@0;/.test(bc) && /F1 WITH F2@0;/.test(bc) && /G2@1;/.test(bc) && /F3-F4@1;/.test(bc) && !/ROTATION/.test(bc) && /Longitudinal invariance \(bifactor-CFA\) - Configural/.test(bc), bc);
   check('bcfa metric: loadings equated by shared labels (LG_p, Lf_p), T2 variances free', /G1 BY X1\* \(LG_1\);/.test(bm) && /G2 BY Y1\* \(LG_1\);/.test(bm) && /G2 BY Y6 \(LG_6\);/.test(bm) && /F1 BY X1\* \(L1_1\);/.test(bm) && /F3 BY Y1\* \(L1_1\);/.test(bm) && /F4 BY Y4\* \(L2_1\);/.test(bm) && !/G2@1;/.test(bm) && !/F3-F4@1;/.test(bm), bm);

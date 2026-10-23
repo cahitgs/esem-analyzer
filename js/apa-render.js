@@ -58,39 +58,86 @@ function verdict(fit) {
  * Δχ² uses the Satorra–Bentler scaling; the row above is treated as the more-constrained model
  * when it has the larger df.
  */
-export function renderFitTable(models, { deltaMode = 'consecutive', caption = 'Goodness-of-fit statistics', wlsmv = null } = {}) {
+/** Model family read from the output itself: a rotated solution is ESEM, a general factor makes it bifactor. */
+export function fitFamily(p) {
+  if (!p) return null;
+  const rotated = !!p.rotation, bifactor = !!p.generalFactor;
+  return bifactor ? (rotated ? 'besem' : 'bcfa') : (rotated ? 'esem' : 'cfa');
+}
+
+/** Which model each fit row is compared with. 'auto' follows Morin's (2023) sequence whenever the outputs span at
+ *  least two of the four measurement models: ESEM and bifactor-CFA are compared with the CFA, bifactor-ESEM with
+ *  the ESEM (else with the bifactor-CFA, else with the CFA). A χ² difference is only meaningful for nested pairs
+ *  (CFA within ESEM, bifactor-CFA within bifactor-ESEM); the other pairs get ΔCFI/ΔTLI/ΔRMSEA only. Outputs of one
+ *  family (e.g. CFAs with 1, 2, 3 factors) keep the older row-by-row ('consecutive') comparison. */
+export function fitComparisons(models, deltaMode = 'auto') {
+  if (deltaMode === 'none' || models.length < 2) return { mode: 'none', rows: models.map(() => ({ ref: null, nested: false })) };
+  const fam = models.map((m) => fitFamily(m.parsed));
+  const distinct = new Set(fam.filter(Boolean));
+  const mode = deltaMode === 'consecutive' ? 'consecutive'
+    : (deltaMode === 'reference' || (fam.every(Boolean) && distinct.size >= 2)) ? 'reference' : 'consecutive';
+  if (mode === 'consecutive') return { mode, rows: models.map((m, i) => ({ ref: i ? i - 1 : null, nested: true })) };
+  const first = (f) => fam.indexOf(f);
+  const rows = models.map((m, i) => {
+    const f = fam[i];
+    let ref = -1, nested = false;
+    if (f === 'esem') { ref = first('cfa'); nested = true; }
+    else if (f === 'bcfa') { ref = first('cfa'); nested = false; }
+    else if (f === 'besem') {
+      if (first('esem') >= 0) { ref = first('esem'); nested = false; }
+      else if (first('bcfa') >= 0) { ref = first('bcfa'); nested = true; }
+      else { ref = first('cfa'); nested = false; }
+    }
+    return ref < 0 || ref === i ? { ref: null, nested: false } : { ref, nested };
+  });
+  return { mode, rows };
+}
+
+/** Δ statistics of `cur` against `ref`: Satorra–Bentler scaled Δχ² only for nested MLR pairs, index differences always. */
+export function fitDelta(ref, cur, { nested = true, useWrmr = false } = {}) {
+  const mc = (ref.df ?? 0) >= (cur.df ?? 0) ? ref : cur;
+  const mu = mc === ref ? cur : ref;
+  const sb = nested && !useWrmr ? sbChiSqDiff(mc, mu) : null;
+  return {
+    sb,
+    dcfi: cur.cfi != null && ref.cfi != null ? cur.cfi - ref.cfi : null,
+    dtli: cur.tli != null && ref.tli != null ? cur.tli - ref.tli : null,
+    drmsea: cur.rmsea != null && ref.rmsea != null ? cur.rmsea - ref.rmsea : null,
+  };
+}
+
+export const REFERENCE_NOTE = 'Each Δ compares the model with the reference model in the vs. column — ESEM and bifactor-CFA with the CFA, bifactor-ESEM with the ESEM (Morin, 2023); Δχ²(s) is given only for nested pairs (CFA within ESEM, bifactor-CFA within bifactor-ESEM).';
+
+export function renderFitTable(models, { deltaMode = 'auto', caption = 'Goodness-of-fit statistics', wlsmv = null } = {}) {
   // Auto-detect WLSMV: no model reports SRMR but at least one reports WRMR.
   const useWrmr = wlsmv != null ? wlsmv : (!models.some((m) => m.parsed.fit.srmr != null) && models.some((m) => m.parsed.fit.wrmr != null));
   const fitCol = useWrmr ? 'WRMR' : 'SRMR';
+  const cmp = fitComparisons(models, deltaMode);
   const head = ['Model', 'χ²', 'df', 'CFI', 'TLI', 'RMSEA [90% CI]', fitCol];
-  if (deltaMode !== 'none') head.push('Δχ²(s)', 'Δdf', 'ΔCFI', 'ΔTLI', 'ΔRMSEA');
+  if (cmp.mode !== 'none') head.push(...(cmp.mode === 'reference' ? ['vs.'] : []), 'Δχ²(s)', 'Δdf', 'ΔCFI', 'ΔTLI', 'ΔRMSEA');
   let rows = '';
   models.forEach((m, i) => {
     const f = m.parsed.fit;
     const cells = [m.label, f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli),
       `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`, f3(useWrmr ? f.wrmr : f.srmr)];
-    if (deltaMode !== 'none') {
-      if (i === 0) cells.push('—', '—', '—', '—', '—');
+    if (cmp.mode !== 'none') {
+      const c = cmp.rows[i];
+      if (c.ref == null) cells.push(...(cmp.mode === 'reference' ? ['—'] : []), '—', '—', '—', '—', '—');
       else {
-        const prev = models[i - 1].parsed.fit, cur = f;
-        const mc = (prev.df ?? 0) >= (cur.df ?? 0) ? prev : cur;
-        const mu = mc === prev ? cur : prev;
-        const sb = useWrmr ? null : sbChiSqDiff(mc, mu);  // SB scaled diff is MLR-only
-        const dcfi = cur.cfi != null && prev.cfi != null ? cur.cfi - prev.cfi : null;
-        const dtli = cur.tli != null && prev.tli != null ? cur.tli - prev.tli : null;
-        const drmsea = cur.rmsea != null && prev.rmsea != null ? cur.rmsea - prev.rmsea : null;
+        const d = fitDelta(models[c.ref].parsed.fit, f, { nested: c.nested, useWrmr });
+        if (cmp.mode === 'reference') cells.push(models[c.ref].label);
         cells.push(
-          sb ? `${f2(sb.TRd)}${sb.p < 0.05 ? '*' : ''}` : '—',
-          sb ? sb.df : '—',
-          dcfi != null ? signed(dcfi, 3) : '—',
-          dtli != null ? signed(dtli, 3) : '—',
-          drmsea != null ? signed(drmsea, 3) : '—',
+          d.sb ? `${f2(d.sb.TRd)}${d.sb.p < 0.05 ? '*' : ''}` : '—',
+          d.sb ? d.sb.df : '—',
+          d.dcfi != null ? signed(d.dcfi, 3) : '—',
+          d.dtli != null ? signed(d.dtli, 3) : '—',
+          d.drmsea != null ? signed(d.drmsea, 3) : '—',
         );
       }
     }
     rows += `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
   });
-  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'}. CFI = comparative fit index; TLI = Tucker–Lewis index; RMSEA = root mean square error of approximation; ${fitCol} = ${useWrmr ? 'weighted' : 'standardized'} root mean square residual.${useWrmr ? ' For the WLSMV estimator, χ² differences require the DIFFTEST option; compare models via ΔCFI/ΔTLI/ΔRMSEA.' : ' Δχ²(s) = Satorra–Bentler scaled χ² difference for the MLR estimator.'}${unestimatedFitNote(models, { html: true })} * <i>p</i> &lt; .05.</p>`;
+  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'}. CFI = comparative fit index; TLI = Tucker–Lewis index; RMSEA = root mean square error of approximation; ${fitCol} = ${useWrmr ? 'weighted' : 'standardized'} root mean square residual.${cmp.mode === 'reference' ? ' ' + REFERENCE_NOTE : ''}${useWrmr ? ' For the WLSMV estimator, χ² differences require the DIFFTEST option; compare models via ΔCFI/ΔTLI/ΔRMSEA.' : ' Δχ²(s) = Satorra–Bentler scaled χ² difference for the MLR estimator.'}${unestimatedFitNote(models, { html: true })} * <i>p</i> &lt; .05.</p>`;
   return `<table class="apa-table"><caption><b>Table.</b> ${caption}</caption>`
     + `<thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${note}`;
 }
@@ -142,6 +189,7 @@ export function sortInvarianceModels(models) {
 export function noFitReason(p) {
   if (p?.fit?.chi2 != null && p?.fit?.df != null) return null;
   if (p?.emptyCategory) return `a response category of ${p.emptyCategory.variable} is empty in group ${p.emptyCategory.group} — merge it on the Model step`;
+  if (p?.inputError) return `Mplus input error — ${p.inputError}`;
   if (!p?.converged) return 'did not converge';
   if (p.rotationFailed) return 'rotation did not converge';
   if (p.chiSquareComputed === false) return 'χ² could not be computed';
@@ -388,8 +436,11 @@ function loadingsSentence(p) {
   return s + '.';
 }
 
-function comparisonSentence(models) {
+function comparisonSentence(all) {
   const corrMean = (p) => { const v = p.factorCorr.map((c) => Math.abs(c.est)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  // first-order solutions only: bifactor factor correlations are fixed at 0 by construction
+  const models = all.filter((m) => !m.parsed.generalFactor);
+  if (models.length < 2) return '';
   const a = models[0].parsed, b = models[models.length - 1].parsed;
   const ra = corrMean(a), rb = corrMean(b);
   if (ra == null || rb == null) return '';

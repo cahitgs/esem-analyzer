@@ -7,7 +7,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { buildInp, requestedModels, maxLineLength, INV_SEQUENCE } from '../js/syntax-generator.js';
-import { createModelSpec, setItems, setFactorCount } from '../js/state.js';
+import { createModelSpec, setItems, setFactorCount, mplusLabel, groupLabels } from '../js/state.js';
 import { parseOut } from '../js/out-parser.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -112,6 +112,22 @@ console.log('\n— CFA and bifactor-CFA multi-group chains (cinv:/bcinv:) —');
   const b1 = parseOut(fx('mg_bcfa_configural.out')), b3 = parseOut(fx('mg_bcfa_scalar.out'));
   ok('fixture: bifactor-CFA chain titles → multigroup / bcfa', b1.invModel === 'bcfa' && b1.invStep === 'Configural' && b3.invStep === 'Scalar (intercepts)', [b1.invModel, b1.invStep, b3.invStep]);
   ok('fixture: bifactor-CFA df 84 → 112 (metric +20 = 2p−(k+1), scalar +8 = p−(k+1))', b1.fit.df === 84 && b3.fit.df === 112, [b1.fit.df, b3.fit.df]);
+}
+
+console.log('\n— group labels written to Mplus —');
+{
+  ok('mplusLabel: a space becomes an underscore', mplusLabel('Group 1', '1') === 'Group_1', mplusLabel('Group 1', '1'));
+  ok('mplusLabel: non-letter start gets a g, 8-character limit', mplusLabel('2nd wave', '2') === 'g2nd_wav' && mplusLabel('Adolescents', '1') === 'Adolesce', [mplusLabel('2nd wave', '2'), mplusLabel('Adolescents', '1')]);
+  ok('mplusLabel: Turkish letters and an empty label', mplusLabel('kadın', '2') === 'kadin' && mplusLabel('', '3') === 'g3' && mplusLabel('   ', 'x') === 'gx', [mplusLabel('kadın', '2'), mplusLabel('', '3')]);
+  const s = createModelSpec({ fileName: 'd.dat', delimiter: 'whitespace', hasHeader: false, nCols: 7, nRows: 100, varNames: ['a1', 'a2', 'a3', 'b1', 'b2', 'b3', 'g'], categorical: [], missingCode: null });
+  setItems(s, ['a1', 'a2', 'a3', 'b1', 'b2', 'b3']); setFactorCount(s, 2);
+  s.groups = { enabled: true, variable: 'g', codes: [{ code: 1, label: 'Group 1' }, { code: 2, label: 'Group 2' }], invariance: { sequence: [...INV_SEQUENCE] } };
+  const inp = buildInp(s, 'inv:configural');
+  ok('GROUPING and MODEL lines carry the sanitized labels', /GROUPING IS g \(1 = Group_1 2 = Group_2\);/.test(inp) && /^MODEL Group_2:$/m.test(inp) && !/Group 2/.test(inp), inp.split('\n').filter((l) => /GROUPING|^MODEL/.test(l)));
+  ok('the same labels in every chain (CFA, bifactor-CFA, bifactor-ESEM)', ['cinv:metric', 'bcinv:scalar', 'binv:strict'].every((k) => /^MODEL Group_2:$/m.test(buildInp(s, k))));
+  s.groups.codes = [{ code: 1, label: 'Groupone' }, { code: 2, label: 'Groupone' }, { code: 3, label: 'Groupone' }];
+  const gl = groupLabels(s);
+  ok('colliding labels are made unique with the code', gl.get('1') === 'Groupone' && gl.get('2') === 'Groupon2' && gl.get('3') === 'Groupon3' && new Set(gl.values()).size === 3, [...gl.values()]);
 }
 
 console.log(`\nmginv.test: ${pass} passed, ${fail} failed`);

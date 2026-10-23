@@ -2,7 +2,7 @@
 // syntax preview (opened in the Mplus sheet). Mutates the shared ModelSpec via state.js helpers
 // and re-renders; the paper on the right draws the hypothesized model from the same spec.
 import { el, $, $$, toast, downloadText } from './ui.js';
-import { setFactorCount, setItems, setWaveItems, setTime1, toggleTarget, factorIds, validateSpec, guessWaveCounterparts, orderWave2, sparseCategories, setMerge, clearMerge, categoryCounts, looksLikeId } from './state.js';
+import { setFactorCount, setItems, setWaveItems, setTime1, toggleTarget, factorIds, validateSpec, guessWaveCounterparts, orderWave2, sparseCategories, setMerge, clearMerge, categoryCounts, looksLikeId, mplusLabel } from './state.js';
 import { buildInp, requestedModels, INV_SEQUENCE, INV_META } from './syntax-generator.js';
 import { distinctValues } from './data-parse.js';
 import { serializeSpec, applySavedSpec } from './spec-store.js';
@@ -285,9 +285,11 @@ function renderGroupsMode(host) {
     const codeBox = el('div', { class: 'namegrid' });
     SPEC.groups.codes.forEach((c) => codeBox.append(el('div', { class: 'name-row' }, [
       el('span', { class: 'k' }, `= ${c.code}`),
-      el('input', { value: c.label, class: 'input input-sm', 'aria-label': `label for group ${c.code}`, oninput: (e) => { c.label = e.target.value.trim() || ('g' + c.code); updatePreview(); } }),
+      el('input', { value: c.label, class: 'input input-sm', 'aria-label': `label for group ${c.code}`, oninput: (e) => { c.label = e.target.value.trim() || ('g' + c.code); updatePreview(); },
+        // on commit, show the label Mplus will actually get (letters, digits, underscores; ≤ 8 characters)
+        onchange: (e) => { c.label = mplusLabel(e.target.value, c.code); e.target.value = c.label; updatePreview(); } }),
     ])));
-    host.append(el('p', { class: 'sub-h' }, 'Group labels'), codeBox);
+    host.append(el('p', { class: 'sub-h' }, 'Group labels'), codeBox, el('p', { class: 'hint', style: { marginTop: '4px' } }, 'Mplus labels: letters, digits and underscores, up to 8 characters — a space is replaced by an underscore.'));
   }
 }
 

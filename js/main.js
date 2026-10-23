@@ -460,9 +460,8 @@ function renderSyntaxStep() {
   syncConv();
   aidBody.push(el('p', { class: 'hint' }, 'Loosens Mplus’s convergence criterion — Morin’s remedy for hard-to-converge invariance models. Report it when used.'));
   aidBody.push(el('p', { class: 'sub-h' }, 'Constrain residual variance > 0'));
-  if (invOn) {
-    aidBody.push(el('p', { class: 'hint', style: { marginTop: '0' } }, 'Residual constraints are not emitted for invariance sequences (a MODEL label there equates the parameter across groups/waves). CONVERGENCE above still applies to every generated model.'));
-  } else {
+  {
+    if (invOn) aidBody.push(el('p', { class: 'hint', style: { marginTop: '0' } }, 'Applied to the total-sample measurement models only — not to the invariance sequences (a MODEL label there equates the parameter across groups/waves). CONVERGENCE above still applies to every generated model.'));
     const box = el('div', { class: 'chips' });
     for (const it of spec.items) {
       // Categorical items are offered disabled: their residual variance is not a free parameter
@@ -546,7 +545,13 @@ function outRowLabel(m) {
 
 function deriveLabel(p, fileName) {
   if (p.invStep) return p.invStep; // invariance step parsed from the TITLE (longitudinal or multi-group)
-  const t = p.title || '';
+  const t0 = p.title || '';
+  const wave = t0.match(/\[([^\]]+)\]\s*$/); // "[Time 1]" — a measurement model estimated on one wave of a longitudinal design
+  const t = wave ? t0.slice(0, wave.index).trim() : t0;
+  const base = baseLabel(t, fileName);
+  return wave ? `${base} · ${wave[1]}` : base;
+}
+function baseLabel(t, fileName) {
   if (/within-?CFA/i.test(t)) return /bifactor/i.test(t) ? 'Bifactor-ESEM-within-CFA' : 'ESEM-within-CFA';
   const inv = t.match(/invariance\s*[-:]\s*(.+)/i);
   if (inv) return inv[1].trim();
@@ -653,7 +658,7 @@ function renderResultsOutput() {
   }
 
   if (single.length) {
-    addHtml('fit', `<div class="apa">${renderFitTable(single, { deltaMode: single.length > 1 ? 'consecutive' : 'none' })}</div>`);
+    addHtml('fit', `<div class="apa">${renderFitTable(single, { deltaMode: single.length > 1 ? 'auto' : 'none' })}</div>`);
     // per-model blocks: first-order models (CFA/ESEM) above bifactor models (stable within groups)
     const ordered = [...single].sort((a, b) => (a.parsed.generalFactor ? 1 : 0) - (b.parsed.generalFactor ? 1 : 0));
     ordered.forEach((m, i) => {

@@ -43,6 +43,31 @@ export function createModelSpec(data) {
 
 export function factorIds(spec) { return spec.factors.map((f) => f.id); }
 
+/** An Mplus-legal group label: letters, digits and underscores only, starting with a letter, at most 8
+ *  characters (the rules of an Mplus name). "Group 1" → "Group_1", "2nd wave" → "g2nd_wav", "" → "g<code>".
+ *  A label with a space would break the GROUPING line ("Grouping label has no corresponding value"). */
+export function mplusLabel(label, code) {
+  const TR = { 'ç': 'c', 'Ç': 'C', 'ğ': 'g', 'Ğ': 'G', 'ı': 'i', 'İ': 'I', 'ö': 'o', 'Ö': 'O', 'ş': 's', 'Ş': 'S', 'ü': 'u', 'Ü': 'U' };
+  let t = String(label ?? '').trim().replace(/[çÇğĞıİöÖşŞüÜ]/g, (m) => TR[m]).replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!t) t = 'g' + String(code ?? '').replace(/[^A-Za-z0-9]/g, '');
+  if (!/^[A-Za-z]/.test(t)) t = 'g' + t;
+  return t.slice(0, 8);
+}
+
+/** The labels actually written to Mplus, one per group code, made unique (a collision gets the code appended). */
+export function groupLabels(spec) {
+  const out = new Map();
+  const used = new Set();
+  for (const c of spec.groups?.codes || []) {
+    let l = mplusLabel(c.label, c.code);
+    if (used.has(l)) { const tail = String(c.code).replace(/[^A-Za-z0-9]/g, ''); l = (l.slice(0, Math.max(1, 8 - tail.length)) + tail).slice(0, 8); }
+    let k = 2;
+    while (used.has(l)) { const suf = String(k++); l = l.slice(0, 8 - suf.length) + suf; }
+    used.add(l); out.set(String(c.code), l);
+  }
+  return out;
+}
+
 /** True when a column looks like a case identifier: unique consecutive integers over the rows (1…N or alike).
  *  Such a column must never be an indicator — it has no common variance and its group means differ wildly,
  *  so the scalar invariance step cannot even converge. Without data, the column name decides. */

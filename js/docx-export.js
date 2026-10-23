@@ -3,7 +3,7 @@
 //   exportDocx(models)         → a real .docx via the `docx` UMD global
 //   zipInputs(files)           → bundle generated .inp files via the `JSZip` UMD global
 import { apaNum, apaP, toast, downloadBlob } from './ui.js';
-import { sbChiSqDiff, buildLoadingsModel, invarianceSeries, sortInvarianceModels, invarianceProseText, unestimatedNote, noFitReason, unestimatedFitNote, noChiSquareSentence } from './apa-render.js';
+import { sbChiSqDiff, buildLoadingsModel, invarianceSeries, sortInvarianceModels, invarianceProseText, unestimatedNote, noFitReason, unestimatedFitNote, noChiSquareSentence, fitComparisons, fitDelta, REFERENCE_NOTE } from './apa-render.js';
 
 // Sequences are ordered by invariance step (configural → … → latent means), never by df: an output without
 // fit statistics has no df and used to be sorted to the top of its table.
@@ -62,34 +62,33 @@ function fitRows(models) {
   // WLSMV runs report WRMR instead of SRMR, and their χ² values cannot be SB-differenced —
   // same auto-detection as apa-render's renderFitTable so screen and Word/.docx stay in step.
   const useWrmr = !models.some((m) => m.parsed.fit.srmr != null) && models.some((m) => m.parsed.fit.wrmr != null);
+  const cmp = fitComparisons(models, multi ? 'auto' : 'none');
   const head = ['Model', 'χ²', 'df', 'CFI', 'TLI', 'RMSEA [90% CI]', useWrmr ? 'WRMR' : 'SRMR'];
-  if (multi) head.push('Δχ²(s)', 'Δdf', 'ΔCFI', 'ΔTLI', 'ΔRMSEA');
+  if (cmp.mode !== 'none') head.push(...(cmp.mode === 'reference' ? ['vs.'] : []), 'Δχ²(s)', 'Δdf', 'ΔCFI', 'ΔTLI', 'ΔRMSEA');
   const body = models.map((m, i) => {
     const f = m.parsed.fit;
     const r = [m.label, f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`, f3(useWrmr ? f.wrmr : f.srmr)];
-    if (multi) {
-      if (i === 0) r.push('—', '—', '—', '—', '—');
+    if (cmp.mode !== 'none') {
+      const c = cmp.rows[i];
+      if (c.ref == null) r.push(...(cmp.mode === 'reference' ? ['—'] : []), '—', '—', '—', '—', '—');
       else {
-        const prev = models[i - 1].parsed.fit, cur = f;
-        const mc = (prev.df ?? 0) >= (cur.df ?? 0) ? prev : cur;
-        const sb = useWrmr ? null : sbChiSqDiff(mc, mc === prev ? cur : prev);
-        const dcfi = cur.cfi != null && prev.cfi != null ? cur.cfi - prev.cfi : null;
-        const dtli = cur.tli != null && prev.tli != null ? cur.tli - prev.tli : null;
-        const drm = cur.rmsea != null && prev.rmsea != null ? cur.rmsea - prev.rmsea : null;
-        r.push(sb ? f2(sb.TRd) + (sb.p < 0.05 ? '*' : '') : '—', sb ? sb.df : '—',
-          dcfi != null ? signed(dcfi) : '—', dtli != null ? signed(dtli) : '—', drm != null ? signed(drm) : '—');
+        const dl = fitDelta(models[c.ref].parsed.fit, f, { nested: c.nested, useWrmr });
+        if (cmp.mode === 'reference') r.push(models[c.ref].label);
+        r.push(dl.sb ? f2(dl.sb.TRd) + (dl.sb.p < 0.05 ? '*' : '') : '—', dl.sb ? dl.sb.df : '—',
+          dl.dcfi != null ? signed(dl.dcfi) : '—', dl.dtli != null ? signed(dl.dtli) : '—', dl.drmsea != null ? signed(dl.drmsea) : '—');
       }
     }
     return r;
   });
-  return { head, body, useWrmr };
+  return { head, body, useWrmr, mode: cmp.mode };
 }
 // Fit-table note, estimator-aware (Word HTML + .docx share the wording).
 function fitNote(models, fr) {
   const n = `N = ${models[0]?.parsed.nObs ?? '—'}.`;
+  const ref = fr.mode === 'reference' ? ' ' + REFERENCE_NOTE : '';
   return fr.useWrmr
-    ? `${n} WRMR = weighted root mean square residual. For the WLSMV estimator, χ² differences require the Mplus DIFFTEST option; compare models via ΔCFI/ΔTLI/ΔRMSEA.${unestimatedFitNote(models)}`
-    : `${n} Δχ²(s) = Satorra–Bentler scaled difference (MLR).${unestimatedFitNote(models)} * p < .05.`;
+    ? `${n} WRMR = weighted root mean square residual.${ref} For the WLSMV estimator, χ² differences require the Mplus DIFFTEST option; compare models via ΔCFI/ΔTLI/ΔRMSEA.${unestimatedFitNote(models)}`
+    : `${n}${ref} Δχ²(s) = Satorra–Bentler scaled difference (MLR).${unestimatedFitNote(models)} * p < .05.`;
 }
 function signed(x) { return (x < 0 ? '−' : '+') + apaNum(Math.abs(x), 3); }
 
