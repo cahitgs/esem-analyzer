@@ -148,4 +148,3 @@ and the factor correlation at its ESEM value (.439).
 
 ---
 
-*Independent tool; not affiliated with or endorsed by Muthén & Muthén.*

@@ -168,8 +168,7 @@ See the full walkthrough in **[`GUIDE.md`](GUIDE.md)**.
 
 ## Notes & disclaimer
 
-- This is an independent helper. It is **not affiliated with or endorsed by** Muthén & Muthén (Mplus).
-  You need your own licensed copy of Mplus to run the syntax.
+- This is an independent helper. You need your own licensed copy of Mplus to run the syntax.
 - Your data and output files never leave the browser; the app makes no network requests with them.
 - The reference article and its supplement are © their publisher and are **not** redistributed here.
 
