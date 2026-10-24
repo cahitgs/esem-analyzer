@@ -146,5 +146,3 @@ The **higher-order form** is verified the same way: on the bundled 2-factor ESEM
 npar / df / χ² / log-likelihood in Mplus 8.3, with the freed factor variances estimated back at 1.000
 and the factor correlation at its ESEM value (.439).
 
----
-
