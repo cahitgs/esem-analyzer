@@ -19,6 +19,9 @@ tab), and whether the first row is a header, and it can export an **Mplus-ready 
 header, dot decimals) — handy when your file is a semicolon CSV or uses comma decimals, which Mplus cannot
 read directly.
 
+**Example data.** The second card of the Data page holds the two simulated data sets of Morin’s (2023) chapter (two groups; two occasions) with the model of the tutorial article: one click loads the file, the names and the sketch, and the `.dat` and model `.json` files can be downloaded. `?example=data1` / `?example=data2` open the app with them.
+
+
 For this walkthrough you can skip data entry: open the app and click **"Skip to reading .out files →"**, or
 use the example file `example-dataset/data.dat` (600 × 16, a synthetic 3-factor / bifactor dataset).
 

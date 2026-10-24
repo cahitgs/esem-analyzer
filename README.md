@@ -23,6 +23,10 @@ links to it on localhost and remembers the choice. A first-visit **Guide** expla
 
 ---
 
+## Example data (Morin, 2023)
+
+The Data page offers the two simulated data sets of Morin’s (2023) Hoyle-Handbook chapter with the model used in the tutorial article: **Data Set 1** (`Ch27-Data1.dat`, two groups of 5,000, one non-invariant intercept) and **Data Set 2** (`Ch27-Data2.dat`, the same 12 indicators at two occasions, bifactor-ESEM population). *Load with the article’s model* loads the file, the variable names and the sketch (3 factors, target rotation, all four measurement models, the six-step invariance sequence — 28 inputs), so that *Generate syntax* writes exactly the inputs of the article; the `.dat` files and the model `.json` files can also be downloaded. Direct links: `https://cahitgs.github.io/esem-analyzer/?example=data1` and `?example=data2`. The files are redistributed with the author’s permission (`example-dataset/ch27/`).
+
 ## What it does
 
 | Step | You do | The app does |
@@ -126,6 +130,7 @@ node test/runscripts.test.mjs   # auto-mode run scripts    (18)
 node test/mginv.test.mjs        # MG bifactor-ESEM invariance + Mplus-legal group labels (63)
 node test/catinv.test.mjs       # categorical WLSMV invariance + DIFFTEST, ESEM + bifactor-ESEM chains (128)
 node test/invorder.test.mjs     # invariance step order, unestimated outputs (MG + longitudinal), total-sample models, ID columns, Time-2 pairing incl. an 18 000-file name sweep, Mplus input errors, invariance tables without a verdict column (142)
+node test/examples.test.mjs     # the article’s two example data sets: presets regenerate the article’s 56 inputs byte for byte (20)
 ```
 
 The two multi-group invariance engines were additionally **cross-validated against De Beer & Morin's

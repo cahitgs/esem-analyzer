@@ -1070,6 +1070,42 @@ const DEMO_SETS = {
     'LongInv_besem_4_strict.out', 'LongInv_besem_5_varcov.out', 'LongInv_besem_6_latentmean.out',
   ],
 };
+// ============================ Example data (the article's two data sets) ============================
+// Morin's (2023) Ch27 data sets with the model of the tutorial: the file, the variable names and the sketch
+// load in one step (Data page card or ?example=data1|data2), then Generate syntax reproduces the article's inputs.
+const EXAMPLES = {
+  data1: { file: 'Ch27-Data1.dat', preset: 'data1-model.json', title: 'Data Set 1 (two groups)',
+    names: ['X1', 'X2', 'X3', 'X4', 'Y1', 'Y2', 'Y3', 'Y4', 'Z1', 'Z2', 'Z3', 'Z4', 'GROUP'] },
+  data2: { file: 'Ch27-Data2.dat', preset: 'data2-model.json', title: 'Data Set 2 (two occasions)',
+    names: ['x1_t1', 'x2_t1', 'x3_t1', 'x4_t1', 'y1_t1', 'y2_t1', 'y3_t1', 'y4_t1', 'z1_t1', 'z2_t1', 'z3_t1', 'z4_t1', 'x1_t2', 'x2_t2', 'x3_t2', 'x4_t2', 'y1_t2', 'y2_t2', 'y3_t2', 'y4_t2', 'z1_t2', 'z2_t2', 'z3_t2', 'z4_t2'] },
+};
+async function loadExample(id) {
+  const ex = EXAMPLES[id];
+  if (!ex) { toast('Unknown example: ' + id, 'err'); return; }
+  try {
+    const base = 'example-dataset/ch27/';
+    const get = (n) => fetch(base + n).then((r) => { if (!r.ok) throw new Error(`${n}: HTTP ${r.status}`); return r; });
+    const [text, saved] = await Promise.all([get(ex.file).then((r) => r.text()), get(ex.preset).then((r) => r.json())]);
+    const data = parseDataFile(text, ex.file);
+    data.varNames = ex.names.slice();
+    data.categorical = [];
+    appState.data = data;
+    appState.dataText = text;
+    renderDataReview(data);
+    appState.spec = createModelSpec(data);
+    appState.spec.signature = specSignature(data);
+    const r = applySavedSpec(appState.spec, saved);
+    if (!r.ok) throw new Error('the model preset does not match the file');
+    saveSpecLocal(appState.spec);
+    appState.builder = null;
+    unlock('model');
+    appState.builder = mountModelBuilder($('#model-host'), appState.spec, { onChange: onModelChange, onBack: () => goStep('data') });
+    toast(`${ex.title} loaded with the article’s model — press Generate syntax`, 'ok');
+  } catch (err) {
+    toast('Could not load the example: ' + err.message, 'err');
+  }
+}
+
 async function demoBootstrap(which) {
   // Model / Syntax: rebuild the 3-factor example spec from the bundled data file so the
   // builder and the generated syntax are shown on the same 15-item / 3-factor example.
@@ -1125,9 +1161,12 @@ function init() {
   // Shortcut for users who already have .out files and don't need to build a model.
   $('#skip-to-results')?.addEventListener('click', () => { appState.reached.model = appState.reached.syntax = true; unlock('results'); renderResultsStep(); });
   const params = new URLSearchParams(location.search);
-  const demo = params.get('demo'), dev = params.get('dev');
+  $('#ex-load-data1')?.addEventListener('click', () => loadExample('data1'));
+  $('#ex-load-data2')?.addEventListener('click', () => loadExample('data2'));
+  const demo = params.get('demo'), dev = params.get('dev'), example = params.get('example');
   if (demo) demoBootstrap(demo);
   else if (dev) devBootstrap(dev);
+  else if (example) loadExample(example);
   else autoOpenGuide();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

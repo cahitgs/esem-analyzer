@@ -1,0 +1,21 @@
+TITLE:
+ESEM (Target oblique) - 3 factors [Time 1]
+DATA:
+FILE = "Ch27-Data2.dat";
+VARIABLE:
+NAMES ARE x1_t1 x2_t1 x3_t1 x4_t1 y1_t1 y2_t1 y3_t1 y4_t1 z1_t1 z2_t1 z3_t1 z4_t1
+  x1_t2 x2_t2 x3_t2 x4_t2 y1_t2 y2_t2 y3_t2 y4_t2 z1_t2 z2_t2 z3_t2 z4_t2;
+USEVARIABLES ARE x1_t1 x2_t1 x3_t1 x4_t1 y1_t1 y2_t1 y3_t1 y4_t1 z1_t1 z2_t1 z3_t1
+  z4_t1;
+ANALYSIS:
+ESTIMATOR IS MLR;
+ROTATION=TARGET(OBLIQUE);
+MODEL:
+F1 BY x1_t1 x2_t1 x3_t1 x4_t1 y1_t1~0 y2_t1~0 y3_t1~0 y4_t1~0 z1_t1~0 z2_t1~0 z3_t1~0
+  z4_t1~0 (*1);
+F2 BY x1_t1~0 x2_t1~0 x3_t1~0 x4_t1~0 y1_t1 y2_t1 y3_t1 y4_t1 z1_t1~0 z2_t1~0 z3_t1~0
+  z4_t1~0 (*1);
+F3 BY x1_t1~0 x2_t1~0 x3_t1~0 x4_t1~0 y1_t1~0 y2_t1~0 y3_t1~0 y4_t1~0 z1_t1 z2_t1
+  z3_t1 z4_t1 (*1);
+OUTPUT:
+SAMPSTAT STANDARDIZED MODINDICES CINTERVAL RESIDUAL SVALUES TECH1 TECH3 TECH4;
