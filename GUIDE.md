@@ -84,7 +84,10 @@ Drop one or many `.out` files. Each is parsed in the browser into a fit row, a s
 (target loadings bold, δ uniqueness, McDonald's ω, factor correlations), auto-written APA prose, and a path
 diagram. Multiple invariance models become a single comparison table with Δχ² (Satorra–Bentler scaled for
 MLR; for WLSMV sequences the column shows Mplus's `DIFFTEST` difference test instead, read from each
-step's own `.out`), ΔCFI, ΔTLI, and ΔRMSEA, and a "supported / not supported" verdict (Chen, 2007). When both
+step's own `.out`), ΔCFI, ΔTLI, and ΔRMSEA; the note gives Chen's (2007) guideline for reading them (a decrease
+of .010 or more in CFI or TLI, or an increase of .015 or more in RMSEA, suggests the added constraints are not
+tenable), names the comparison model of a row whose preceding step was not estimated, and says that the rows
+after a step that went beyond the guideline are reported for completeness only. There is no verdict column. When both
 the ESEM and bifactor-ESEM multi-group sequences are present, they render as two separate tables. Export
 with **Copy for Word** or **Download .docx**.
 
@@ -96,10 +99,10 @@ puts the specific factors on one side and the global factor on the other, reachi
 
 ![Bifactor diagram](docs/img/06-bifactor-diagram.png?v=5)
 
-The six invariance models (men vs women) collapse into one comparison table with the Δ statistics and a
-per-step verdict:
+The six invariance models (men vs women) collapse into one comparison table with the Δ statistics, read
+against Chen's guideline in the note:
 
-![Measurement invariance comparison table](docs/img/07-invariance.png?v=5)
+![Measurement invariance comparison table](docs/img/07-invariance.png?v=6)
 
 ## 5 · ESEM-within-CFA
 

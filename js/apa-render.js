@@ -106,7 +106,7 @@ export function fitDelta(ref, cur, { nested = true, useWrmr = false } = {}) {
   };
 }
 
-export const REFERENCE_NOTE = 'Each Δ compares the model with the reference model in the vs. column — ESEM and bifactor-CFA with the CFA, bifactor-ESEM with the ESEM (Morin, 2023); Δχ²(s) is given only for nested pairs (CFA within ESEM, bifactor-CFA within bifactor-ESEM).';
+export const REFERENCE_NOTE = 'Each Δ compares the model with the reference model in the vs. column — the ESEM with the CFA, then each bifactor model with its first-order counterpart, the comparisons of Morin (2023), who makes the second one for the retained first-order model; Δχ²(s) is given only for nested pairs (CFA within ESEM, bifactor-CFA within bifactor-ESEM).';
 
 export function renderFitTable(models, { deltaMode = 'auto', caption = 'Goodness-of-fit statistics', wlsmv = null } = {}) {
   // Auto-detect WLSMV: no model reports SRMR but at least one reports WRMR.
@@ -150,19 +150,20 @@ export function deltaText(dec) {
 }
 
 // ======================= Measurement-invariance table =======================
-/** Morin's rule (Chen, 2007; Cheung & Rensvold, 2002): the step is supported when the CFI and the
- *  TLI each drop by no more than .010 and the RMSEA rises by no more than .015 — i.e.
- *  ΔCFI ≥ −.010, ΔTLI ≥ −.010, ΔRMSEA ≤ .015. The deltas are compared at the 3-decimal precision
- *  Mplus reports, so a displayed −.010 passes (raw floating-point noise such as
- *  .990 − 1.000 = −0.010000000000000009 must not fail it). ΔTLI is skipped only when a TLI is missing. */
+/** Chen's (2007) guideline, as Morin (2023) applies it: a decrease of .010 or more in CFI or TLI, or an
+ *  increase of .015 or more in RMSEA, suggests that the constraints a step adds are not tenable. The deltas
+ *  are compared at the 3-decimal precision Mplus reports (a displayed −.010 reaches the guideline; raw
+ *  floating-point noise such as .990 − 1.000 = −0.010000000000000009 must not move the result). ok = the
+ *  step stays within the guideline; it is a reading aid for the Δ columns, not a verdict — the tables carry
+ *  no decision column. ΔTLI is skipped only when a TLI is missing. */
 export function invarianceDecision(prev, cur) {
   if (!prev) return { ok: null, text: '—', dcfi: null, dtli: null, drmsea: null };
   const diff = (a, b) => (a != null && b != null ? a - b : null);
   const r3 = (x) => Math.round(x * 1000) / 1000;
   const dcfi = diff(cur.cfi, prev.cfi), dtli = diff(cur.tli, prev.tli), drmsea = diff(cur.rmsea, prev.rmsea);
   const ok = dcfi != null && drmsea != null
-    && r3(dcfi) >= -0.010 && (dtli == null || r3(dtli) >= -0.010) && r3(drmsea) <= 0.015;
-  return { ok, text: dcfi == null ? '—' : (ok ? 'Supported' : 'Not supported'), dcfi, dtli, drmsea };
+    && r3(dcfi) > -0.010 && (dtli == null || r3(dtli) > -0.010) && r3(drmsea) < 0.015;
+  return { ok, text: dcfi == null ? '—' : (ok ? 'Within guideline' : 'Beyond guideline'), dcfi, dtli, drmsea };
 }
 
 // ---- step order and estimation status (shared by the on-screen table, the prose and the Word/.docx export) ----
@@ -205,22 +206,40 @@ export function chiSquareFree(p) { return noFitReason(p) == null && p?.fit?.chi2
 export function noChiSquareSentence(label, f) {
   return `The ${label} model converged (log-likelihood = ${f2(f.logLik)}, AIC = ${f2(f.aic)}, BIC = ${f2(f.bic)}), but Mplus reports no χ²-based fit indices for it (as with MLR and categorical indicators), so CFI, TLI and RMSEA are not available.`;
 }
-/** Rows of an invariance table: sequence order, each model's nearest ESTIMATED predecessor and the decision
- *  against it. A model whose .out has no fit statistics keeps its place but is marked unestimated and skipped
- *  by the comparisons, so a failed step can neither scramble the rows nor hide the configural baseline. */
+/** Rows of an invariance table: sequence order, each model's nearest ESTIMATED predecessor and the Δ against
+ *  it. A model whose .out has no fit statistics keeps its place but is marked unestimated and skipped by the
+ *  comparisons, so a failed step can neither scramble the rows nor hide the configural baseline.
+ *  skipped = the unestimated models between a row and its comparison model (the row then carries a letter
+ *  mark, explained in the note); after = the first earlier step whose Δ went beyond the guideline (null if
+ *  none) — the rows after it are reported for completeness and do not establish their level of invariance. */
 export function invarianceSeries(models) {
   const rows = [];
-  let prev = null;
+  let prev = null, skipped = [], exceeded = null, marks = 0;
   for (const m of sortInvarianceModels(models)) {
     const f = m.parsed.fit || {};
     const reason = noFitReason(m.parsed);
     const estimated = reason == null;
     const dec = estimated ? invarianceDecision(prev ? prev.parsed.fit : null, f)
       : { ok: null, text: 'Not estimated', dcfi: null, dtli: null, drmsea: null };
-    rows.push({ m, f, estimated, reason, prev, dec });
-    if (estimated) prev = m;
+    const row = { m, f, estimated, reason, prev, dec, skipped: estimated && prev ? skipped : [], after: exceeded, mark: '' };
+    if (row.skipped.length) row.mark = String.fromCharCode(97 + marks++);
+    rows.push(row);
+    if (estimated) { prev = m; skipped = []; if (dec.ok === false && !exceeded) exceeded = m; } else skipped = [...skipped, m];
   }
   return rows;
+}
+/** Note sentences shared by the on-screen table and the Word/.docx export: how to read the Δ columns (Chen's
+ *  guideline, the rows after a step that went beyond it) and the letter marks of rows whose comparison model is
+ *  not the preceding step. html → labels escaped for innerHTML. */
+export function invarianceGuidelineNote(series, { html = false } = {}) {
+  const lbl = (m) => (html ? esc(m.label) : m.label);
+  const beyond = series.some((r) => r.estimated && r.dec.ok === false);
+  let s = 'Models are ordered from least to most constrained; each Δ compares with the preceding estimated model. As a guideline (Chen, 2007), a decrease of .010 or more in CFI or TLI, or an increase of .015 or more in RMSEA, suggests that the constraints a step adds are not tenable'
+    + (beyond ? '; the rows after such a step are reported for completeness and do not establish those levels of invariance (Morin, 2023).' : '.');
+  for (const r of series.filter((x) => x.mark)) {
+    s += ` ${html ? `<sup>${r.mark}</sup>` : r.mark} Compared with the ${lbl(r.prev)} model because the ${joinList(r.skipped.map(lbl))} model${r.skipped.length > 1 ? 's' : ''} could not be estimated, so the Δ covers the constraints of both steps.`;
+  }
+  return s;
 }
 /** Fit-table note suffix naming the models without fit statistics and the loglikelihood-only ones ('' when
  *  every model has χ²-based indices). html → labels escaped for innerHTML; plain text for the .docx path. */
@@ -245,14 +264,14 @@ export function renderInvarianceTable(models, { caption, longitudinal = false } 
   // WLSMV (categorical) sequences: the χ² values cannot be differenced or SB-scaled — the only
   // valid Δχ² is Mplus's DIFFTEST, which each step's own .out reports against the previous step.
   const wlsmv = models.some((m) => /MV$/i.test(m.parsed.estimator || '') || m.parsed.diffTest);
-  const head = ['Model', 'χ²', 'df', 'CFI', 'TLI', 'RMSEA [90% CI]', wlsmv ? 'Δχ²' : 'Δχ²(s)', 'Δdf', 'ΔCFI', 'ΔTLI', 'ΔRMSEA', 'Decision'];
+  const head = ['Model', 'χ²', 'df', 'CFI', 'TLI', 'RMSEA [90% CI]', wlsmv ? 'Δχ²' : 'Δχ²(s)', 'Δdf', 'ΔCFI', 'ΔTLI', 'ΔRMSEA'];
   const series = invarianceSeries(models);
   let rows = '';
   let missingDiff = false;
   for (const r of series) {
     const { m, f, dec } = r;
     if (!r.estimated) {
-      const cells = [m.label, ...Array(10).fill('—'), '<span style="color:var(--danger);font-weight:600">Not estimated</span>'];
+      const cells = [esc(m.label), '<span style="color:var(--danger);font-weight:600">Not estimated</span>', ...Array(9).fill('—')];
       rows += `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
       continue;
     }
@@ -263,17 +282,15 @@ export function renderInvarianceTable(models, { caption, longitudinal = false } 
       if (d) { dchi = f2(d.chi2) + (d.p != null && d.p < 0.05 ? '*' : ''); ddf = d.df; }
       else missingDiff = true;
     } else if (prev) { const mc = (prev.df ?? 0) >= (f.df ?? 0) ? prev : f; const mu = mc === prev ? f : prev; const sb = sbChiSqDiff(mc, mu); if (sb) { dchi = f2(sb.TRd) + (sb.p < 0.05 ? '*' : ''); ddf = sb.df; } }
-    const colour = dec.ok === true ? 'color:var(--good)' : dec.ok === false ? 'color:var(--danger)' : '';
-    const cells = [m.label, f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`,
-      dchi, ddf, dec.dcfi != null ? signed(dec.dcfi, 3) : '—', dec.dtli != null ? signed(dec.dtli, 3) : '—', dec.drmsea != null ? signed(dec.drmsea, 3) : '—',
-      `<span style="${colour};font-weight:600">${dec.text}</span>`];
+    const cells = [esc(m.label) + (r.mark ? `<sup>${r.mark}</sup>` : ''), f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`,
+      dchi, ddf, dec.dcfi != null ? signed(dec.dcfi, 3) : '—', dec.dtli != null ? signed(dec.dtli, 3) : '—', dec.drmsea != null ? signed(dec.drmsea, 3) : '—'];
     rows += `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
   }
   const across = longitudinal ? 'across two time points' : `across ${models[0]?.parsed.nGroups ?? 2} groups`;
   const dchiNote = wlsmv
     ? `Δχ² = WLSMV difference test (Mplus DIFFTEST) against the preceding model; WLSMV χ² values cannot be differenced directly.${missingDiff ? ' Missing Δχ² values: run the generated models in order, in one folder, so each step finds the previous step’s DIFFTEST file.' : ''}`
     : 'Δχ²(s) = Satorra–Bentler scaled difference.';
-  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} ${across}. Models are ordered from least to most constrained; each Δ compares with the preceding model. Invariance is supported when ΔCFI ≥ −.010, ΔTLI ≥ −.010, and ΔRMSEA ≤ .015 (Chen, 2007). ${dchiNote}${unestimatedNote(series, { html: true })} * <i>p</i> &lt; .05.</p>`;
+  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} ${across}. ${invarianceGuidelineNote(series, { html: true })} ${dchiNote}${unestimatedNote(series, { html: true })} * <i>p</i> &lt; .05.</p>`;
   return `<table class="apa-table"><caption><b>Table.</b> ${caption}</caption><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${note}`;
 }
 
@@ -283,25 +300,28 @@ export function invarianceProseText(models, { longitudinal = false } = {}) {
   const est = series.filter((r) => r.estimated);
   const skipped = series.filter((r) => !r.estimated);
   const over = longitudinal ? 'across the two time points' : 'across groups';
+  const lower = (r) => r.m.label.toLowerCase();
   const skippedSentence = skipped.length
-    ? ` The ${joinList(skipped.map((r) => r.m.label.toLowerCase()))} model${skipped.length > 1 ? 's' : ''} could not be estimated (${joinList([...new Set(skipped.map((r) => r.reason))])}) and ${skipped.length > 1 ? 'were' : 'was'} left out of the comparisons.`
+    ? ` The ${joinList(skipped.map(lower))} model${skipped.length > 1 ? 's' : ''} could not be estimated (${joinList([...new Set(skipped.map((r) => r.reason))])}) and ${skipped.length > 1 ? 'were' : 'was'} left out of the comparisons.`
     : '';
   if (est.length < 2) return skippedSentence.trim();
-  const supported = [], failedAt = [];
-  est.forEach((r, i) => { if (i === 0) { supported.push(r.m.label); return; } if (r.dec.ok) supported.push(r.m.label); else failedAt.push(r); });
+  // the comparison model, named when it is not the preceding step
+  const against = (r) => (r.skipped.length ? `, against the ${r.prev.label.toLowerCase()} model because the ${joinList(r.skipped.map((x) => x.label.toLowerCase()))} model${r.skipped.length > 1 ? 's' : ''} could not be estimated` : '');
+  const beyond = est.findIndex((r, i) => i > 0 && r.dec.ok === false);
+  const within = est.slice(1, beyond < 0 ? est.length : beyond);
   let s = `${est[0].m.label} invariance provided a baseline against which more constrained models were compared. `;
-  if (!failedAt.length) {
-    const held = joinList(supported.slice(1).map((x) => x.toLowerCase()));
-    s += `All constraints were tenable: ${held} invariance ${supported.length > 2 ? 'were each' : 'was'} supported (ΔCFI ≥ −.010, ΔTLI ≥ −.010, ΔRMSEA ≤ .015), indicating full measurement invariance ${over}.`;
-  } else {
-    const first = failedAt[0];
-    const held = supported.slice(1).map((x) => x.toLowerCase());
-    s += held.length ? `${joinList(held)} invariance ${held.length > 1 ? 'were' : 'was'} supported, but ` : '';
-    s += `${first.m.label.toLowerCase()} invariance was not supported (${deltaText(first.dec)}), indicating non-invariance at this level. Partial-invariance follow-ups (freeing the most divergent parameters via modification indices) are recommended before comparing ${longitudinal ? 'time points' : 'groups'} further.`;
+  if (within.length) {
+    const held = joinList(within.map(lower));
+    s += `The ${held} model${within.length > 1 ? 's' : ''} stayed within Chen’s (2007) guideline of a decrease of less than .010 in CFI and TLI and an increase of less than .015 in RMSEA (${within.map((r) => `${lower(r)}: ${deltaText(r.dec)}${against(r)}`).join('; ')}), which is consistent with ${beyond < 0 ? 'full measurement invariance' : `${held} invariance`} ${over}.`;
+  }
+  if (beyond >= 0) {
+    const r = est[beyond];
+    s += `${within.length ? ' ' : ''}The ${lower(r)} model went beyond that guideline (${deltaText(r.dec)}${against(r)}), so ${lower(r)} invariance should not be accepted as it stands; a partial-invariance model that frees the parameters with the largest modification indices should be examined before the sequence continues (Morin, 2023).`;
+    const rest = est.slice(beyond + 1);
+    if (rest.length) s += ` The ${joinList(rest.map(lower))} model${rest.length > 1 ? 's' : ''} of the full sequence ${rest.length > 1 ? 'are' : 'is'} reported in the table for completeness: each was compared with the model before it and does not establish that level of invariance.`;
   }
   return s + skippedSentence;
 }
-
 export function renderInvarianceProse(models, opts = {}) {
   const s = invarianceProseText(models, opts);
   return s ? `<p class="apa-prose">${s}</p>` : '';

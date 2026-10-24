@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parseOut } from '../js/out-parser.js';
-import { renderLoadingsTable, renderFitTable, fitFamily, fitComparisons } from '../js/apa-render.js';
+import { renderLoadingsTable, renderFitTable, fitFamily, fitComparisons, sbChiSqDiff } from '../js/apa-render.js';
 import { buildWordHtml } from '../js/docx-export.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +75,14 @@ console.log('\n— the four-model fit table: Morin’s reference comparisons —
   const w = buildWordHtml(four);
   check('Word export shows the same vs. column and note', /<th[^>]*>vs\.<\/th>/.test(w) && /reference model/.test(w), w.slice(0, 200));
 }
+
+console.log('\n— Satorra–Bentler scaled χ² difference against a hand computation (Satorra & Bentler, 2001) —');
+// more constrained: T0 = 150, df0 = 15, c0 = 1.1; less constrained: T1 = 100, df1 = 10, c1 = 1.2
+// cd = (15·1.1 − 10·1.2)/(15 − 10) = 0.9; TRd = (150·1.1 − 100·1.2)/0.9 = 50; Δdf = 5
+const sb = sbChiSqDiff({ chi2: 150, df: 15, scalingFactor: 1.1 }, { chi2: 100, df: 10, scalingFactor: 1.2 });
+check('scaled Δχ² = 50.000, Δdf = 5, p < .001', sb && approx(sb.TRd, 50, 1e-9) && sb.df === 5 && sb.p < 0.001 && sb.scaled === true, sb);
+const raw = sbChiSqDiff({ chi2: 150, df: 15 }, { chi2: 100, df: 10 });
+check('without scaling factors: plain Δχ² = 50, flagged unscaled; equal df → null', raw && approx(raw.TRd, 50, 1e-9) && raw.scaled === false && sbChiSqDiff({ chi2: 150, df: 15 }, { chi2: 100, df: 15 }) === null, raw);
 
 console.log(`\napa.test: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

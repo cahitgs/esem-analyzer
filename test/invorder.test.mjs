@@ -53,7 +53,8 @@ ok('strict compares with metric (nearest estimated model)', series[3].prev?.labe
 const h2 = renderInvarianceTable(mixed);
 ok('table: Configural first even though the failed scalar has no df', h2.indexOf('<td>Configural</td>') < h2.indexOf('<td>Scalar (intercepts)</td>'));
 ok('table: Not estimated cell + note naming the model and the reason', /Not estimated<\/span>/.test(h2) && /Not estimated: Mplus produced no fit statistics for Scalar \(intercepts\) \(rotation did not converge\)/.test(h2));
-ok('table: strict row carries a decision', /<td>Strict \(residuals\)<\/td>(?:<td>[^<]*<\/td>){10}<td><span[^>]*>(Supported|Not supported)<\/span>/.test(h2));
+ok('table: no decision column, strict row marked ᵃ and the note names its comparison model', !/Decision|Supported/.test(h2) && /<td>Strict \(residuals\)<sup>a<\/sup><\/td>(?:<td>[^<]*<\/td>){10}<\/tr>/.test(h2) && /<sup>a<\/sup> Compared with the Metric \(loadings\) model because the Scalar \(intercepts\) model could not be estimated/.test(h2), h2.slice(0, 400));
+ok('series: strict row lists the skipped scalar and carries mark a', series[3].skipped.map((m) => m.label).join() === 'Scalar (intercepts)' && series[3].mark === 'a');
 const prose = renderInvarianceProse(mixed);
 ok('prose: names the unestimated model, no empty parentheses', /scalar \(intercepts\) model could not be estimated \(rotation did not converge\)/.test(prose) && !/\(\)/.test(prose), prose);
 const word = buildWordHtml(mixed);
