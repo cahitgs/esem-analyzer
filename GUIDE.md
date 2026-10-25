@@ -88,7 +88,7 @@ Drop one or many `.out` files. Each is parsed in the browser into a fit row, a s
 diagram. Multiple invariance models become a single comparison table with Δχ² (Satorra–Bentler scaled for
 MLR; for WLSMV sequences the column shows Mplus's `DIFFTEST` difference test instead, read from each
 step's own `.out`), ΔCFI, ΔTLI, and ΔRMSEA; the note gives Chen's (2007) guideline for reading them (a decrease
-of .010 or more in CFI or TLI, or an increase of .015 or more in RMSEA, suggests the added constraints are not
+of more than .010 in CFI or TLI, or an increase of more than .015 in RMSEA, suggests the added constraints are not
 tenable), names the comparison model of a row whose preceding step was not estimated, and says that the rows
 after a step that went beyond the guideline are reported for completeness only. There is no verdict column. When both
 the ESEM and bifactor-ESEM multi-group sequences are present, they render as two separate tables. Export

@@ -150,9 +150,10 @@ export function deltaText(dec) {
 }
 
 // ======================= Measurement-invariance table =======================
-/** Chen's (2007) guideline, as Morin (2023) applies it: a decrease of .010 or more in CFI or TLI, or an
- *  increase of .015 or more in RMSEA, suggests that the constraints a step adds are not tenable. The deltas
- *  are compared at the 3-decimal precision Mplus reports (a displayed −.010 reaches the guideline; raw
+/** Chen's (2007) guideline as Morin (2023) and Swami et al. (2023) state it: decreases of no more than .010 in CFI
+ *  and TLI and an increase of no more than .015 in RMSEA support the more constrained model; larger changes suggest
+ *  that the constraints a step adds are not tenable. The deltas are compared at the 3-decimal precision Mplus
+ *  reports (a displayed −.010 still stays within the guideline; raw
  *  floating-point noise such as .990 − 1.000 = −0.010000000000000009 must not move the result). ok = the
  *  step stays within the guideline; it is a reading aid for the Δ columns, not a verdict — the tables carry
  *  no decision column. ΔTLI is skipped only when a TLI is missing. */
@@ -162,7 +163,7 @@ export function invarianceDecision(prev, cur) {
   const r3 = (x) => Math.round(x * 1000) / 1000;
   const dcfi = diff(cur.cfi, prev.cfi), dtli = diff(cur.tli, prev.tli), drmsea = diff(cur.rmsea, prev.rmsea);
   const ok = dcfi != null && drmsea != null
-    && r3(dcfi) > -0.010 && (dtli == null || r3(dtli) > -0.010) && r3(drmsea) < 0.015;
+    && r3(dcfi) >= -0.010 && (dtli == null || r3(dtli) >= -0.010) && r3(drmsea) <= 0.015;
   return { ok, text: dcfi == null ? '—' : (ok ? 'Within guideline' : 'Beyond guideline'), dcfi, dtli, drmsea };
 }
 
@@ -234,7 +235,7 @@ export function invarianceSeries(models) {
 export function invarianceGuidelineNote(series, { html = false } = {}) {
   const lbl = (m) => (html ? esc(m.label) : m.label);
   const beyond = series.some((r) => r.estimated && r.dec.ok === false);
-  let s = 'Models are ordered from least to most constrained; each Δ compares with the preceding estimated model. As a guideline (Chen, 2007), a decrease of .010 or more in CFI or TLI, or an increase of .015 or more in RMSEA, suggests that the constraints a step adds are not tenable'
+  let s = 'Models are ordered from least to most constrained; each Δ compares with the preceding estimated model. As a guideline (Chen, 2007), a decrease of more than .010 in CFI or TLI, or an increase of more than .015 in RMSEA, suggests that the constraints a step adds are not tenable'
     + (beyond ? '; the rows after such a step are reported for completeness and do not establish those levels of invariance (Morin, 2023).' : '.');
   for (const r of series.filter((x) => x.mark)) {
     s += ` ${html ? `<sup>${r.mark}</sup>` : r.mark} Compared with the ${lbl(r.prev)} model because the ${joinList(r.skipped.map(lbl))} model${r.skipped.length > 1 ? 's' : ''} could not be estimated, so the Δ covers the constraints of both steps.`;
@@ -312,7 +313,7 @@ export function invarianceProseText(models, { longitudinal = false } = {}) {
   let s = `${est[0].m.label} invariance provided a baseline against which more constrained models were compared. `;
   if (within.length) {
     const held = joinList(within.map(lower));
-    s += `The ${held} model${within.length > 1 ? 's' : ''} stayed within Chen’s (2007) guideline of a decrease of less than .010 in CFI and TLI and an increase of less than .015 in RMSEA (${within.map((r) => `${lower(r)}: ${deltaText(r.dec)}${against(r)}`).join('; ')}), which is consistent with ${beyond < 0 ? 'full measurement invariance' : `${held} invariance`} ${over}.`;
+    s += `The ${held} model${within.length > 1 ? 's' : ''} stayed within Chen’s (2007) guideline of a decrease of no more than .010 in CFI and TLI and an increase of no more than .015 in RMSEA (${within.map((r) => `${lower(r)}: ${deltaText(r.dec)}${against(r)}`).join('; ')}), which is consistent with ${beyond < 0 ? 'full measurement invariance' : `${held} invariance`} ${over}.`;
   }
   if (beyond >= 0) {
     const r = est[beyond];
