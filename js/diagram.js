@@ -232,17 +232,22 @@ function renderStandard(model, opts) {
   }
 
   const parts = [];
-  for (const f of factors) for (const it of items) {
+  // Labels: cross-loadings sit nearer the factor (a slightly different fraction per factor, so two factors'
+  // labels never share an x), target loadings nearer the item; target labels are drawn last so that a
+  // cross-loading label can never cover a main loading.
+  const crossLabels = [], targetLabels = [];
+  factors.forEach((f, fi) => { for (const it of items) {
     if (!model.hasPath(f, it)) continue;
     const target = model.isTarget(f, it);
     const v = model.value(f, it);
     if (!target && !theoretical && (!showCross || (v != null && Math.abs(v) < crossThreshold))) continue;
     parts.push(loadingLine(attach[f].x, attach[f].y, itemX - 1, itemY[it], target));
     if (!theoretical && v != null) {
-      const t = 0.62, lx = attach[f].x + (itemX - attach[f].x) * t, ly = attach[f].y + (itemY[it] - attach[f].y) * t - 4;
-      parts.push(valLabel(lx, ly, fnum(v), target ? PAL.ink : PAL.faint, target));
+      const t = target ? 0.68 : 0.34 + 0.07 * (fi % 3), lx = attach[f].x + (itemX - attach[f].x) * t, ly = attach[f].y + (itemY[it] - attach[f].y) * t - 4;
+      (target ? targetLabels : crossLabels).push(valLabel(lx, ly, fnum(v), target ? PAL.ink : PAL.faint, target));
     }
-  }
+  } });
+  parts.push(...crossLabels, ...targetLabels);
   // factor correlations — a curved double-headed arrow between the two factor ellipses
   const seen = new Set();
   for (const c of model.corr) {
@@ -305,18 +310,21 @@ function renderBifactor(model, opts) {
   const gAttach = edgePoint(gp.x, gp.y, gRx, gRy, itemRight, gcyDefault);
 
   const parts = [];
-  // specific → item (left side)
-  for (const f of specifics) for (const it of items) {
+  // specific → item (left side); labels as in the first-order diagram: cross-loadings nearer the factor,
+  // target loadings nearer the item, target labels drawn last
+  const crossLabels = [], targetLabels = [];
+  specifics.forEach((f, fi) => { for (const it of items) {
     if (!model.hasPath(f, it)) continue;
     const target = model.isTarget(f, it);
     const v = model.value(f, it);
     if (!target && !theoretical && (!showCross || (v != null && Math.abs(v) < crossThreshold))) continue;
     parts.push(loadingLine(attach[f].x, attach[f].y, itemX - 1, itemY[it], target));
     if (!theoretical && v != null) {
-      const t = 0.6, lx = attach[f].x + (itemX - attach[f].x) * t, ly = attach[f].y + (itemY[it] - attach[f].y) * t - 4;
-      parts.push(valLabel(lx, ly, fnum(v), target ? PAL.ink : PAL.faint, target));
+      const t = target ? 0.66 : 0.34 + 0.07 * (fi % 3), lx = attach[f].x + (itemX - attach[f].x) * t, ly = attach[f].y + (itemY[it] - attach[f].y) * t - 4;
+      (target ? targetLabels : crossLabels).push(valLabel(lx, ly, fnum(v), target ? PAL.ink : PAL.faint, target));
     }
-  }
+  } });
+  parts.push(...crossLabels, ...targetLabels);
   // global → item (right side)
   if (gVisible) for (const it of items) {
     if (!model.hasPath(g, it)) continue;
