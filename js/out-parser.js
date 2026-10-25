@@ -300,10 +300,10 @@ export function parseOut(text) {
   });
   res.isBifactor = !!res.generalFactor;
 
-  // ---- composite reliability (McDonald's ω) ----
+  // ---- composite reliability (McDonald's ω): (Σ|λ|)² / ((Σ|λ|)² + Σδ) over the block's items (Morin et al., 2020) ----
   const omegaOver = (items, f) => {
     let sumL = 0, sumD = 0;
-    for (const it of items) { const l = res.loadings[f]?.[it]?.est; const d = res.uniqueness[it]; if (l == null || d == null) return null; sumL += l; sumD += d; }
+    for (const it of items) { const l = res.loadings[f]?.[it]?.est; const d = res.uniqueness[it]; if (l == null || d == null) return null; sumL += Math.abs(l); sumD += d; }
     return items.length ? (sumL * sumL) / (sumL * sumL + sumD) : null;
   };
   res.specificFactor = {};
