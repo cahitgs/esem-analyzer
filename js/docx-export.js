@@ -157,9 +157,9 @@ export function buildWordHtml(models, { factorLabels = {} } = {}) {
     loads += `</table><p style="font-size:9pt;margin:2pt 0 6pt"><i>Note.</i> ${loadingsNote(p, model)}</p>`;
   }
 
-  const proseParts = [...longiSets.flatMap(([set]) => invProseText(set, { longitudinal: true })), ...proseText(single), ...mgSets.flatMap(([set]) => invProseText(set))];
+  const proseParts = [...proseText(single), ...mgSets.flatMap(([set]) => invProseText(set)), ...longiSets.flatMap(([set]) => invProseText(set, { longitudinal: true }))];
   const prose = proseParts.map((t) => `<p style="font-family:Calibri;font-size:11pt;line-height:1.5;margin:6pt 0">${t}</p>`).join('');
-  return `<html><head><meta charset="utf-8"></head><body>${longi}${inv}${fit}${loads}<h3 style="font-family:Calibri">Suggested text</h3>${prose}</body></html>`;
+  return `<html><head><meta charset="utf-8"></head><body>${fit}${loads}${inv}${longi}<h3 style="font-family:Calibri">Suggested text</h3>${prose}</body></html>`;
 }
 
 export async function copyResultsToWord(models, opts) {
@@ -242,20 +242,6 @@ export async function buildDocxBlob(models, { factorLabels = {} } = {}) {
 
   const blocks = [new Paragraph({ children: [new TextRun({ text: 'ESEM results', bold: true, font: 'Calibri', size: 28 })], spacing: { after: 120 } })];
 
-  // longitudinal invariance table(s) (single-group sequence, one per measurement model)
-  const longiBlock = (set, modelLabel) => {
-    if (!set.length) return;
-    blocks.push(italic(`Table. Tests of longitudinal measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`), mkTable(invRows(set)), note(`Note. ${longiNote(set, modelLabel)}`));
-  };
-  for (const [set, label] of longiSets) longiBlock(set, longiSets.length > 1 ? label : '');
-
-  // invariance table(s) (multi-group) — one per family; the two chains are not nested in each other
-  const mgBlock = (set, modelLabel) => {
-    if (!set.length) return;
-    blocks.push(italic(`Table. Tests of measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`), mkTable(invRows(set)), note(`Note. ${mgNote(set)}`));
-  };
-  for (const [set, label] of mgSets) mgBlock(set, mgSets.length > 1 ? label : '');
-
   // fit table (single-group)
   if (single.length) { const fr = fitRows(single); blocks.push(italic('Table. Goodness-of-fit statistics'), mkTable(fr), note(`Note. ${fitNote(single, fr)}`)); }
 
@@ -283,8 +269,22 @@ export async function buildDocxBlob(models, { factorLabels = {} } = {}) {
     blocks.push(italic(`Table. Standardized factor loadings — ${m.label}`), tbl([hRow, ...rows]), note(`Note. ${loadingsNote(p, model)}`));
   }
 
+  // invariance table(s) (multi-group) — one per family; the two chains are not nested in each other
+  const mgBlock = (set, modelLabel) => {
+    if (!set.length) return;
+    blocks.push(italic(`Table. Tests of measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`), mkTable(invRows(set)), note(`Note. ${mgNote(set)}`));
+  };
+  for (const [set, label] of mgSets) mgBlock(set, mgSets.length > 1 ? label : '');
+
+  // longitudinal invariance table(s) (single-group sequence, one per measurement model)
+  const longiBlock = (set, modelLabel) => {
+    if (!set.length) return;
+    blocks.push(italic(`Table. Tests of longitudinal measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`), mkTable(invRows(set)), note(`Note. ${longiNote(set, modelLabel)}`));
+  };
+  for (const [set, label] of longiSets) longiBlock(set, longiSets.length > 1 ? label : '');
+
   blocks.push(new Paragraph({ children: [new TextRun({ text: 'Suggested text', bold: true, font: 'Calibri', size: 24 })], spacing: { before: 200, after: 80 } }));
-  for (const t of [...longiSets.flatMap(([set]) => invProseText(set, { longitudinal: true })), ...proseText(single), ...mgSets.flatMap(([set]) => invProseText(set))]) blocks.push(para(t));
+  for (const t of [...proseText(single), ...mgSets.flatMap(([set]) => invProseText(set)), ...longiSets.flatMap(([set]) => invProseText(set, { longitudinal: true }))]) blocks.push(para(t));
 
   const doc = new Document({ sections: [{ children: blocks }] });
   return Packer.toBlob(doc);

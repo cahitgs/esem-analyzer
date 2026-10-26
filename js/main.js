@@ -637,26 +637,8 @@ function renderResultsOutput() {
     const prose = renderInvarianceProse(set, { longitudinal: true });
     if (prose) addHtml(`${id}-p`, `<h3 class="ms-h3">Suggested APA text — longitudinal invariance${modelLabel ? ` (${modelLabel})` : ''}</h3>${prose}`);
   };
-  if (longi.length) {
-    const sets = byModel(longi);
-    for (const [set, label] of sets) renderLongiBlock(set, sets.length > 1 ? label : '');
-  }
-
-  if (multi.length) {
-    // Up to four MG chains can coexist (CFA, ESEM, bifactor-CFA, bifactor-ESEM) — they are not nested in
-    // each other, so each gets its own table, split by the model named in the generated TITLE.
-    const sets = byModel(multi);
-    const renderMgBlock = (models, modelLabel) => {
-      if (!models.length) return;
-      const cap = `Tests of measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`;
-      const id = `mginv-${modelLabel || 'all'}`;
-      addHtml(id, `<div class="apa">${renderInvarianceTable(models, { caption: cap })}</div>`);
-      const invProse = renderInvarianceProse(models);
-      if (invProse) addHtml(`${id}-p`, `<h3 class="ms-h3">Suggested APA text — invariance${modelLabel ? ` (${modelLabel})` : ''}</h3>${invProse}`);
-    };
-    for (const [set, label] of sets) renderMgBlock(set, sets.length > 1 ? label : '');
-  }
-
+  // Manuscript order: the four-model fit table and the loadings tables first (Table 1 is the fit table), then the
+  // invariance sequences — across groups before across time. The CSS table counter follows this DOM order.
   if (single.length) {
     addHtml('fit', `<div class="apa">${renderFitTable(single, { deltaMode: single.length > 1 ? 'auto' : 'none' })}</div>`);
     // per-model blocks: first-order models (CFA/ESEM) above bifactor models (stable within groups)
@@ -675,6 +657,26 @@ function renderResultsOutput() {
     const ewc = renderEwcPanel(ordered, cardNo);
     if (ewc) { dyn?.append(ewc); cardNo++; }
     addHtml('prose', `<h3 class="ms-h3">Suggested APA text</h3>${renderProse(single)}`);
+  }
+
+  if (multi.length) {
+    // Up to four MG chains can coexist (CFA, ESEM, bifactor-CFA, bifactor-ESEM) — they are not nested in
+    // each other, so each gets its own table, split by the model named in the generated TITLE.
+    const sets = byModel(multi);
+    const renderMgBlock = (models, modelLabel) => {
+      if (!models.length) return;
+      const cap = `Tests of measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`;
+      const id = `mginv-${modelLabel || 'all'}`;
+      addHtml(id, `<div class="apa">${renderInvarianceTable(models, { caption: cap })}</div>`);
+      const invProse = renderInvarianceProse(models);
+      if (invProse) addHtml(`${id}-p`, `<h3 class="ms-h3">Suggested APA text — invariance${modelLabel ? ` (${modelLabel})` : ''}</h3>${invProse}`);
+    };
+    for (const [set, label] of sets) renderMgBlock(set, sets.length > 1 ? label : '');
+  }
+
+  if (longi.length) {
+    const sets = byModel(longi);
+    for (const [set, label] of sets) renderLongiBlock(set, sets.length > 1 ? label : '');
   }
 
   appState.resultSections = sections;
