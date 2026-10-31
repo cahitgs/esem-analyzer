@@ -8,7 +8,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { buildInp, requestedModels, maxLineLength, INV_SEQUENCE, isCategoricalInvariance, diffTestName } from '../js/syntax-generator.js';
-import { createModelSpec, setItems, setFactorCount, validateSpec, thresholdCounts, thresholdReferents } from '../js/state.js';
+import { createModelSpec, setItems, setFactorCount, validateSpec, thresholdCounts, thresholdReferents, setOrdinal } from '../js/state.js';
 import { buildWordHtml } from '../js/docx-export.js';
 import { parseOut } from '../js/out-parser.js';
 import { renderInvarianceTable } from '../js/apa-render.js';
@@ -42,9 +42,10 @@ const warns = validateSpec(spec).warnings.join(' | ');
 ok('validateSpec: DIFFTEST run-in-order warning', /DIFFTEST/.test(warns), warns);
 ok('validateSpec: no "bifactor not generated" warning any more', !/not generated/.test(warns), warns);
 {
-  const mixed = { ...spec, data: { ...spec.data, categorical: items.slice(0, 6) }, modelTypes: { ...spec.modelTypes, bifactorEsem: false } }; // mixed + bifactor-ESEM is refused on purpose
-  ok('validateSpec: mixed categorical/continuous → mixed-chain note (WLSMV)', /Mixed indicators: the \d+ ordinal items get thresholds/.test(validateSpec(mixed).warnings.join(' ')), validateSpec(mixed).warnings);
-  ok('isCategoricalInvariance: mixed → false (continuous template)', isCategoricalInvariance(mixed) === false);
+  const partial = { ...spec, data: { ...spec.data, categorical: items.slice(0, 6) } }; // a list like this can only come from an edited .json
+  const errs = validateSpec(partial).errors.join(' ');
+  ok('validateSpec: some items flagged ordinal, the rest continuous → refused, one choice for every item', /6 of the 12 items are flagged ordinal/.test(errs) && /Ordinal · WLSMV/.test(errs), validateSpec(partial).errors);
+  ok('isCategoricalInvariance: a partial list is not the categorical chain', isCategoricalInvariance(partial) === false);
 }
 
 // ---- configural: Millsap identification ----
@@ -222,7 +223,7 @@ ok('table: latentmean Δχ²=76.43* (p<.05 star)', /<td>76.43\*<\/td><td>3<\/td>
   setItems(mlr, ['x1', 'x2', 'x3', 'x4', 'x5', 'x6']); setFactorCount(mlr, 2);
   mlr.groups.enabled = true; mlr.groups.variable = 'g'; mlr.groups.codes = [{ code: 1, label: 'g1' }, { code: 2, label: 'g2' }];
   mlr.estimator = 'MLR';
-  ok('validateSpec: categorical chain under MLR → error naming THETA/DIFFTEST and WLSMV', /PARAMETERIZATION = THETA and DIFFTEST.*not MLR.*Switch the estimator to WLSMV/.test(validateSpec(mlr).errors.join(' | ')), validateSpec(mlr).errors);
+  ok('validateSpec: categorical chain under MLR → error naming THETA/DIFFTEST and WLSMV', /PARAMETERIZATION = THETA and DIFFTEST.*not MLR.*Choose Ordinal · WLSMV/.test(validateSpec(mlr).errors.join(' | ')), validateSpec(mlr).errors);
   mlr.estimator = 'WLSMV';
   ok('validateSpec: the same spec under WLSMV has no estimator error', !/THETA and DIFFTEST/.test(validateSpec(mlr).errors.join(' | ')), validateSpec(mlr).errors);
   mlr.groups.enabled = false; mlr.estimator = 'MLR';
@@ -252,43 +253,42 @@ console.log('\n— categorical CFA / bifactor-CFA chains (cinv:/bcinv:, WLSMV/TH
   ok('Word export: one table per chain, in model order CFA, first-order ESEM, bifactor-CFA, bifactor-ESEM', caps.join('|') === 'CFA|first-order ESEM|bifactor-CFA|bifactor-ESEM', caps);
 }
 
-console.log('\n— mixed indicators (ordinal + continuous) multi-group chains —');
+console.log('\n— one choice for every item: all continuous (MLR, intercepts) or all ordinal (WLSMV, thresholds) —');
 {
   const names = ['id', ...Array.from({ length: 12 }, (_, i) => `m${i + 1}`), 'g'];
-  const rows = Array.from({ length: 300 }, (_, r) => [r + 1, ...Array.from({ length: 6 }, (_, i) => 1 + ((r + i) % 5)), ...Array.from({ length: 6 }, (_, i) => (3 + ((r * 7 + i) % 11) / 4).toFixed(2)), 1 + (r % 2)].map(String));
-  const mk = (est) => {
-    const s = createModelSpec({ fileName: 'mx.dat', delimiter: 'whitespace', hasHeader: true, nCols: 14, nRows: 300, varNames: names, categorical: names.slice(1, 7), missingCode: null, _matrix: rows });
-    setItems(s, names.slice(1, 13)); setFactorCount(s, 3);
-    const ids = s.factors.map((f) => f.id);
-    for (const it of names.slice(1, 13)) s.target[it] = {};
-    names.slice(1, 13).forEach((it, i) => { s.target[it][ids[Math.floor(i / 4)]] = true; });
-    s.estimator = est;
-    s.modelTypes = { cfa: true, esem: true, bifactorCfa: true, bifactorEsem: false };
-    s.groups = { enabled: true, variable: 'g', codes: [{ code: 1, label: 'a' }, { code: 2, label: 'b' }], invariance: { sequence: [...INV_SEQUENCE] } };
-    return s;
-  };
-  const s = mk('WLSMV');
-  { const sb = mk('WLSMV'); sb.modelTypes.bifactorEsem = true; ok('mixed set + bifactor-ESEM checked → refused with guidance (its scalar step is not identified in Mplus)', /bifactor-ESEM sequence with mixed indicators is not identified/.test(validateSpec(sb).errors.join(' ')), validateSpec(sb).errors); }
-  ok('mixed set: valid under WLSMV with the mixed-chain note; refused under MLR', validateSpec(s).errors.length === 0 && /Mixed indicators/.test(validateSpec(s).warnings.join(' ')) && /not MLR/.test(validateSpec(mk('MLR')).errors.join(' ')), [validateSpec(s).errors, validateSpec(mk('MLR')).errors]);
-  const c = buildInp(s, 'cinv:configural'), sc = buildInp(s, 'cinv:scalar'), st = buildInp(s, 'cinv:strict'), lm = buildInp(s, 'cinv:latentmean');
-  const main = (x) => x.split('MODEL b:')[0], grp = (x) => x.split('MODEL b:')[1];
-  ok('mixed CFA configural: THETA + CATEGORICAL lists the six ordinal items only', /PARAMETERIZATION = THETA;/.test(c) && /CATEGORICAL ARE m1 m2 m3 m4 m5 m6;/.test(c), c);
-  ok('mixed configural: thresholds for ordinal items (first + referent second labelled), intercepts free for continuous ones', /\[m1\$1\] \(t1\);/.test(c) && /\[m1\$2\] \(t2\);/.test(c) && /\[m2\$2\];/.test(c) && !/\[m7\$/.test(c) && /\[m7 m8 m9 m10 m11 m12\];/.test(c), c);
-  ok('mixed configural: ordinal uniquenesses @1 in group a, free in group b; continuous residuals free', /m1@1; m2@1;/.test(main(c)) && /m1\*; m2\*;/.test(grp(c)) && /\nm7 m8 m9 m10 m11 m12;/.test(c), c);
-  ok('mixed configural: group means free for factors with an ordinal referent (F1, F2), fixed for the all-continuous F3', /\[F1\*\]; \[F2\*\]; \[F3@0\];/.test(grp(c)), grp(c));
-  ok('mixed scalar: all thresholds labelled, continuous intercepts labelled, all group means free', /\[m1\$4\] \(t4\);/.test(sc) && /\[m7 m8 m9 m10 m11 m12\] \(i1-i6\);/.test(sc) && /\[F1\*\]; \[F2\*\]; \[F3\*\];/.test(grp(sc)), sc);
-  ok('mixed strict: ordinal uniquenesses refixed @1 in group b, continuous residuals labelled', /m1@1; m2@1;/.test(grp(st)) && /m7 m8 m9 m10 m11 m12 \(u1-u6\);/.test(st), st);
-  ok('mixed latent means: group means refixed; DIFFTEST file names per family', /\[F1-F3@0\];/.test(grp(lm)) && /DIFFTEST = CfaInv_diff_varcov.dat;/.test(lm.split('MODEL:')[0]) && /DIFFTEST = Inv_diff_configural.dat;/.test(buildInp(s, 'inv:metric').split('MODEL:')[0]) && /BifactorCfaInv_diff_configural/.test(buildInp(s, 'bcinv:configural')) && /BifactorInv_diff_configural/.test(buildInp(s, 'binv:configural')), null);
-  // EFA sets: Mplus wants all means of a set free or all fixed — with the all-continuous F3 the ESEM / bifactor-ESEM
-  // sets keep every mean at 0 until scalar and leave the referent second thresholds free until then
-  const be = buildInp(s, 'binv:configural'), ee = buildInp(s, 'inv:metric');
-  ok('mixed bifactor-ESEM / ESEM with a referent-less factor: no referent labels, all set means @0 in group b until scalar', (main(be).match(/\$2\] \(t\d+\);/g) || []).length === 0 && /\[G@0\]; \[F1@0\]; \[F2@0\]; \[F3@0\];/.test(grp(be)) && /\[F1@0\]; \[F2@0\]; \[F3@0\];/.test(grp(ee)) && /\[F1\*\]; \[F2\*\]; \[F3\*\];/.test(grp(buildInp(s, 'inv:scalar'))), [main(be).match(/\$2\] \(t\d+\);/g), grp(be)]);
-  const s2 = mk('WLSMV'); s2.data.categorical = [...names.slice(1, 7), 'm9']; // every factor now owns an ordinal referent
-  const be2 = buildInp(s2, 'binv:configural'), e2 = buildInp(s2, 'inv:configural');
-  ok('mixed sets where every factor has an ordinal referent: Morin’s rule applies to the whole EFA set (referent labels, means free from configural)', (main(be2).match(/\$2\] \(t\d+\);/g) || []).length === 4 && /\[G\*\]; \[F1\*\]; \[F2\*\]; \[F3\*\];/.test(grp(be2)) && (main(e2).match(/\$2\] \(t\d+\);/g) || []).length === 3 && /\[F1\*\]; \[F2\*\]; \[F3\*\];/.test(grp(e2)), [main(be2).match(/\$2\] \(t\d+\);/g), grp(be2)]);
-  const c2 = buildInp(s, 'cinv:configural');
-  ok('CFA keeps the per-factor rule (referent factors free, F3 @0)', /\[F1\*\]; \[F2\*\]; \[F3@0\];/.test(grp(c2)) && (main(c2).match(/\$2\] \(t\d+\);/g) || []).length === 2, grp(c2));
-  for (const k of ['cinv', 'inv', 'bcinv', 'binv']) ok(`mixed ${k}: all steps ≤ 90 chars/line`, INV_SEQUENCE.every((stp) => maxLineLength(buildInp(s, `${k}:${stp}`)) <= 90));
+  const rows = Array.from({ length: 300 }, (_, r) => [r + 1, ...Array.from({ length: 12 }, (_, i) => 1 + ((r + i) % 5)), 1 + (r % 2)].map(String));
+  const s = createModelSpec({ fileName: 'mx.dat', delimiter: 'whitespace', hasHeader: true, nCols: 14, nRows: 300, varNames: names, categorical: names.slice(1, 7), missingCode: null, _matrix: rows }); // a partial list, as an edited .json could carry
+  setItems(s, names.slice(1, 13)); setFactorCount(s, 3);
+  const ids = s.factors.map((f) => f.id);
+  for (const it of names.slice(1, 13)) s.target[it] = {};
+  names.slice(1, 13).forEach((it, i) => { s.target[it][ids[Math.floor(i / 4)]] = true; });
+  s.estimator = 'WLSMV';
+  s.modelTypes = { cfa: true, esem: true, bifactorCfa: true, bifactorEsem: true };
+  s.groups = { enabled: true, variable: 'g', codes: [{ code: 1, label: 'a' }, { code: 2, label: 'b' }], invariance: { sequence: [...INV_SEQUENCE] } };
+  ok('a partial list is refused for every chain, naming the one choice', /6 of the 12 items are flagged ordinal and the rest continuous/.test(validateSpec(s).errors.join(' ')), validateSpec(s).errors);
+  setOrdinal(s, true);
+  ok('setOrdinal(true): every column flagged, estimator WLSMV, the categorical chains apply', s.data.ordinal === true && s.data.categorical.length === names.length && s.estimator === 'WLSMV' && isCategoricalInvariance(s) === true);
+  ok('…the spec is valid (DIFFTEST note only) and the measurement models declare CATEGORICAL ARE ALL', validateSpec(s).errors.length === 0 && /CATEGORICAL ARE ALL;/.test(buildInp(s, 'esem')) && /CATEGORICAL ARE ALL;/.test(buildInp(s, 'cfa')), validateSpec(s).errors);
+  const head = (x) => x.split('MODEL:')[0];
+  ok('…all four invariance chains are the thresholds chains: THETA at every step, DIFFTEST read from the second step on', ['cinv', 'inv', 'bcinv', 'binv'].every((k) => INV_SEQUENCE.every((stp) => /PARAMETERIZATION = THETA;/.test(buildInp(s, `${k}:${stp}`))) && !/DIFFTEST = /.test(head(buildInp(s, `${k}:configural`))) && /DIFFTEST = /.test(head(buildInp(s, `${k}:metric`)))));
+  ok('…thresholds, not intercepts, carry the scalar step', ['cinv', 'inv', 'bcinv', 'binv'].every((k) => /\$1\]/.test(buildInp(s, `${k}:scalar`)) && !/\] \(i\d/.test(buildInp(s, `${k}:scalar`))));
+  s.aids.positiveResiduals = ['m1'];
+  setOrdinal(s, false);
+  ok('setOrdinal(false): no column flagged, estimator MLR, the intercept chains apply (no CATEGORICAL, no THETA)', s.data.ordinal === false && s.data.categorical.length === 0 && s.estimator === 'MLR' && !/CATEGORICAL/.test(buildInp(s, 'esem')) && !/THETA/.test(buildInp(s, 'cinv:configural')) && /\] \(i\d/.test(buildInp(s, 'cinv:scalar')));
+  ok('…residual-variance aids survive the switch to continuous', s.aids.positiveResiduals.join() === 'm1');
+  setOrdinal(s, true);
+  ok('switching to ordinal drops the residual-variance aids (not free parameters under the categorical model)', s.aids.positiveResiduals.length === 0);
+  for (const k of ['cinv', 'inv', 'bcinv', 'binv']) ok(`ordinal ${k}: all steps ≤ 90 chars/line`, INV_SEQUENCE.every((stp) => maxLineLength(buildInp(s, `${k}:${stp}`)) <= 90));
+}
+{
+  const names = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'];
+  const rows = Array.from({ length: 120 }, (_, r) => [1 + (r % 5), 1 + (r % 5), 1 + (r % 4), 1 + (r % 5), 1 + (r % 3), 1 + (r % 12)].map(String));
+  const s = createModelSpec({ fileName: 'many.dat', delimiter: 'whitespace', hasHeader: true, nCols: 6, nRows: 120, varNames: names, categorical: [], missingCode: null, _matrix: rows });
+  setItems(s, names); setFactorCount(s, 2); names.forEach((it, i) => { s.target[it] = { [i < 3 ? 'F1' : 'F2']: true }; });
+  setOrdinal(s, true);
+  ok('ordinal indicators with more than 10 distinct values are refused (Mplus allows at most 10 categories)', /m6 shows 12 distinct values/.test(validateSpec(s).errors.join(' ')) && /at most 10 categories/.test(validateSpec(s).errors.join(' ')), validateSpec(s).errors);
+  setOrdinal(s, false);
+  ok('…and accepted as continuous', !/at most 10 categories/.test(validateSpec(s).errors.join(' ')));
 }
 
 console.log(`\ncatinv.test: ${pass} passed, ${fail} failed`);

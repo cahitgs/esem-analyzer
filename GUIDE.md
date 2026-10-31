@@ -57,7 +57,7 @@ A few load-bearing conventions:
   measurement models are still generated on the total sample (with time on, on the Time-1 indicators), followed by one invariance sequence per checked measurement model — **CFA**, **ESEM**, **bifactor-CFA** and
   **bifactor-ESEM** (the bifactor chains handle the G factor's variance/mean/covariances per step; the bifactor-ESEM chain uses orthogonal
   target rotation) — each with its own file prefix and its own results table.
-- **Categorical items** (all items flagged on the Data step) switch the multi-group sequence to the
+- **Ordinal indicators** (one choice for every item: *Ordinal · WLSMV* on the Data page or under *Rotation & estimator*) switch the multi-group sequence to the
   **WLSMV + `PARAMETERIZATION=THETA`** thresholds chain: configural already equates every item's first
   threshold plus one referent's second threshold per factor (Millsap identification — latent means are
   free in the non-reference groups from the start), scalar equates all thresholds, strict refixes the
@@ -67,9 +67,8 @@ A few load-bearing conventions:
   bifactor-ESEM sequence follows the same chain (one more referent's second threshold for the G factor,
   Morin's rule) with its own `BifactorInv_diff_<step>.dat` files. Across time the same thresholds chain is
   generated for CFA, ESEM, bifactor-CFA and bifactor-ESEM (thresholds equated across waves by shared labels, Time-1
-  uniquenesses fixed at 1, `LongInv_<model>_diff_<step>.dat` files). Mixed item sets (some ordinal, some continuous)
-  run under WLSMV/THETA with thresholds for the ordinal and intercepts for the continuous items (CFA, ESEM and
-  bifactor-CFA; a factor's latent mean is freed from configural on only when it owns an ordinal referent). A response
+  uniquenesses fixed at 1, `LongInv_<model>_diff_<step>.dat` files). Continuous and ordinal
+  indicators are not mixed in one model: the estimator follows the response scale (Finney & DiStefano, 2013). A response
   category empty in one group or at one wave stops WLSMV: the invariance card lists these **sparse categories** with
   their counts and merges them into a neighbour on request (`DEFINE: IF (item EQ k) THEN item = j;` in every input).
 - Every model requests Morin's recommended output line, `SAMPSTAT STANDARDIZED MODINDICES CINTERVAL

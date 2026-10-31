@@ -197,7 +197,7 @@ both.groups.enabled = true; both.groups.variable = 'GV'; both.groups.codes = [{ 
 check('multigroup + longitudinal mutually exclusive', validateSpec(both).errors.some((e) => /either multi-group or longitudinal/i.test(e)), validateSpec(both).errors);
 const catLong = makeSpec();
 catLong.data.categorical = ['X1', 'Y2']; // one column per wave flagged categorical
-check('some (not all) wave columns categorical → error asking to flag all or none', validateSpec(catLong).errors.some((e) => /2 of the 12 wave columns are flagged categorical/.test(e) && /flag all of them/.test(e)), validateSpec(catLong).errors);
+check('some (not all) wave columns categorical → error asking to flag all or none', validateSpec(catLong).errors.some((e) => /2 of the 12 wave columns are flagged ordinal/.test(e) && /all alike/.test(e)), validateSpec(catLong).errors);
 const catOutside = makeSpec(); catOutside.data = { ...catOutside.data, categorical: ['GV'] };
 check('categorical column outside the waves is fine', validateSpec(catOutside).errors.length === 0, validateSpec(catOutside).errors);
 

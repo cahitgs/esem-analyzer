@@ -2,7 +2,7 @@
 // syntax preview (opened in the Mplus sheet). Mutates the shared ModelSpec via state.js helpers
 // and re-renders; the paper on the right draws the hypothesized model from the same spec.
 import { el, $, $$, toast, downloadText } from './ui.js';
-import { setFactorCount, setItems, setWaveItems, setTime1, toggleTarget, factorIds, validateSpec, guessWaveCounterparts, orderWave2, sparseCategories, setMerge, clearMerge, categoryCounts, looksLikeId, mplusLabel } from './state.js';
+import { setFactorCount, setItems, setWaveItems, setTime1, toggleTarget, factorIds, validateSpec, guessWaveCounterparts, orderWave2, sparseCategories, setMerge, clearMerge, categoryCounts, looksLikeId, mplusLabel, setOrdinal } from './state.js';
 import { buildInp, requestedModels, INV_SEQUENCE, INV_META } from './syntax-generator.js';
 import { distinctValues } from './data-parse.js';
 import { serializeSpec, applySavedSpec } from './spec-store.js';
@@ -13,7 +13,6 @@ let onChange = () => {};
 let onBack = () => {};
 let activeKey = null;   // the model whose syntax is previewed and whose structure the paper draws
 let barHost = null;
-let itemMode = 'select'; // 'select' = pick the items; 'ordinal' = mark ordered-categorical items (thresholds, WLSMV)
 
 export function mountModelBuilder(host, spec, opts = {}) {
   SPEC = spec; onChange = opts.onChange || (() => {}); onBack = opts.onBack || (() => {});
@@ -28,14 +27,10 @@ function buildLayout() {
   const head = ctrlHead('Step 2 · Model', 'Sketch the factor pattern', 'Choose the items and factors, mark each item’s target loading in Λ, then pick the rotation, the estimator, and the models to generate.');
   const body = [];
 
-  // 1 · items — pick them, or switch the chips to marking ordinal (categorical) items without going back to Data
+  // 1 · items — pick them; whether they are continuous or ordinal is one choice for all of them (card 4)
   body.push(card(1, 'Items', 'Variables that load on the factors', [
-    el('div', { class: 'row', style: { marginBottom: '10px' } }, [
-      segmented('mb-itemmode', [{ v: 'select', t: 'Select items' }, { v: 'ordinal', t: 'Mark ordinal items' }], itemMode, (v) => { itemMode = v; refresh(); }),
-      el('span', { id: 'mb-itemmode-hint', class: 'small muted' }, ''),
-    ]),
     el('div', { id: 'mb-items', class: 'chips' }),
-    el('div', { id: 'mb-ordinal-tools', class: 'row', style: { marginTop: '10px' } }),
+    el('p', { id: 'mb-items-hint', class: 'hint' }, ''),
   ]));
 
   // 2 · factors
@@ -53,7 +48,7 @@ function buildLayout() {
   ], [el('span', { class: 'small muted', id: 'mb-grid-hint' }, '')]));
 
   // 4 · rotation & estimator
-  body.push(card(4, 'Rotation & estimator', 'How the solution is rotated and estimated', [rotationControls()]));
+  body.push(card(4, 'Rotation & estimator', 'How the solution is rotated and estimated; whether the indicators are continuous or ordinal', [rotationControls()]));
 
   // 5 · model types
   body.push(card(5, 'Models to generate', 'One .inp per switched-on model', [modelTypeControls()],
@@ -120,7 +115,13 @@ function rotationControls() {
       oninput: (e) => { const v = e.target.value.trim(); SPEC.rotation.epsilon = v === '' ? null : parseFloat(v); updatePreview(); },
     }),
   ]));
-  box.append(field('Estimator', segmented('mb-est', [{ v: 'MLR', t: 'MLR' }, { v: 'WLSMV', t: 'WLSMV' }], SPEC.estimator, (v) => { SPEC.estimator = v; refresh(); })));
+  // one decision for every item (Morin): continuous → MLR with intercepts; ordinal → WLSMV with thresholds (THETA, DIFFTEST)
+  box.append(field('Indicators & estimator', segmented('mb-est', [{ v: 'MLR', t: 'Continuous · MLR' }, { v: 'WLSMV', t: 'Ordinal · WLSMV' }], SPEC.estimator, (v) => {
+    setOrdinal(SPEC, v === 'WLSMV'); SPEC.data.ordinalTouched = true;
+    toast(v === 'WLSMV' ? 'All items are treated as ordinal — WLSMV with thresholds' : 'All items are treated as continuous — MLR with intercepts', 'ok');
+    refresh();
+  })));
+  box.append(el('p', { class: 'hint' }, 'The choice applies to every item. Ordinal indicators — four or fewer response categories, or asymmetric thresholds (Finney & DiStefano, 2013) — get thresholds under WLSMV (THETA parameterization, DIFFTEST between the invariance steps); continuous indicators get intercepts under MLR.'));
   return box;
 }
 
@@ -142,7 +143,7 @@ function modelTypeControls() {
   return box;
 }
 
-function segmented(id, opts, current, onpick) {
+export function segmented(id, opts, current, onpick) {
   const box = el('div', { id, class: 'seg', role: 'group' });
   for (const o of opts) {
     box.append(el('button', { type: 'button', 'data-v': o.v, 'aria-pressed': o.v === current ? 'true' : 'false', onclick: () => onpick(o.v) }, o.t));
@@ -160,43 +161,24 @@ function gridLegend() {
 
 // ---------- render/update ----------
 function refresh() {
-  // items chips — selection mode, or ordinal-marking mode (the flags live on the data, shared with the Data step)
+  // items chips — with time on, this card IS the Time-1 picker: Time 2 follows the change and its columns cannot be picked here
   const itemBox = $('#mb-items');
   if (itemBox) {
     itemBox.innerHTML = '';
     const timeOn = SPEC.longitudinal.enabled;
-    const cat = SPEC.data.categorical;
-    const hintEl = $('#mb-itemmode-hint'), toolsEl = $('#mb-ordinal-tools');
-    syncSegmented('mb-itemmode', itemMode);
-    if (itemMode === 'ordinal') {
-      // only the selected items are shown; a filled chip = ordered-categorical (thresholds, WLSMV)
-      const shown = timeOn ? [...SPEC.longitudinal.waves[0], ...SPEC.longitudinal.waves[1]] : SPEC.items;
-      const nCat = shown.filter((v) => cat.includes(v)).length;
-      if (hintEl) hintEl.textContent = `Click an item to mark it ordinal (filled = ordinal, thresholds + WLSMV). ${nCat} of ${shown.length} marked.`;
-      for (const v of shown) {
-        const on = cat.includes(v);
-        itemBox.append(el('button', { type: 'button', class: 'chip chip-sm mono', 'aria-pressed': on ? 'true' : 'false', title: on ? 'ordinal — click to treat as continuous' : 'continuous — click to treat as ordinal', onclick: () => { setCategorical(v, !on); refresh(); } }, v));
-      }
-      if (toolsEl) toolsEl.replaceChildren(
-        btn('All selected → ordinal', { size: 'btn-sm', onclick: () => { for (const v of shown) setCategorical(v, true); refresh(); } }),
-        btn('All → continuous', { size: 'btn-sm', onclick: () => { for (const v of shown) setCategorical(v, false); refresh(); } }),
-      );
-    } else {
-      if (hintEl) hintEl.textContent = cat.length ? `${SPEC.items.filter((v) => cat.includes(v)).length} of ${SPEC.items.length} selected items are ordinal.` : '';
-      if (toolsEl) toolsEl.replaceChildren();
-      // with time on, this card IS the Time-1 picker: Time 2 follows the change and its columns cannot be picked here
-      const inT2 = new Set(timeOn ? SPEC.longitudinal.waves[1] || [] : []);
-      for (const v of SPEC.data.varNames) {
-        const on = SPEC.items.includes(v);
-        const disabled = inT2.has(v);
-        itemBox.append(el('button', {
-          type: 'button', class: 'chip chip-sm mono', disabled, 'aria-pressed': on ? 'true' : 'false',
-          onclick: disabled ? undefined : () => {
-            const next = on ? SPEC.items.filter((x) => x !== v) : SPEC.data.varNames.filter((x) => SPEC.items.includes(x) || x === v);
-            if (next.length >= 1) { if (timeOn) setTime1(SPEC, next); else setItems(SPEC, next); refresh(); }
-          },
-        }, v));
-      }
+    const hintEl = $('#mb-items-hint');
+    if (hintEl) hintEl.textContent = `${SPEC.items.length} selected · treated as ${SPEC.estimator === 'WLSMV' ? 'ordinal (WLSMV, thresholds)' : 'continuous (MLR, intercepts)'} — one choice for every item, made under Rotation & estimator.`;
+    const inT2 = new Set(timeOn ? SPEC.longitudinal.waves[1] || [] : []);
+    for (const v of SPEC.data.varNames) {
+      const on = SPEC.items.includes(v);
+      const disabled = inT2.has(v);
+      itemBox.append(el('button', {
+        type: 'button', class: 'chip chip-sm mono', disabled, 'aria-pressed': on ? 'true' : 'false',
+        onclick: disabled ? undefined : () => {
+          const next = on ? SPEC.items.filter((x) => x !== v) : SPEC.data.varNames.filter((x) => SPEC.items.includes(x) || x === v);
+          if (next.length >= 1) { if (timeOn) setTime1(SPEC, next); else setItems(SPEC, next); refresh(); }
+        },
+      }, v));
     }
   }
   // factor count + labels
@@ -221,16 +203,6 @@ function refresh() {
   renderGrid();
   renderValidation();
   updatePreview();
-}
-
-// Flag a column ordered-categorical (or not). The estimator follows: the first ordinal item switches MLR to
-// WLSMV; residual-variance aids drop the item (not a free parameter under the categorical model).
-function setCategorical(v, on) {
-  const cat = SPEC.data.categorical.filter((x) => x !== v);
-  if (on) cat.push(v);
-  SPEC.data.categorical = cat;
-  if (on && SPEC.estimator === 'MLR') { SPEC.estimator = 'WLSMV'; toast('Estimator switched to WLSMV for the ordinal items', 'ok'); }
-  SPEC.aids.positiveResiduals = (SPEC.aids.positiveResiduals || []).filter((it) => !cat.includes(it));
 }
 
 function renderGroups() {
@@ -389,7 +361,7 @@ function toggleStep(seqHolder, step, on) {
   seqHolder.sequence = seq;
 }
 
-function syncSegmented(id, current) {
+export function syncSegmented(id, current) {
   const box = $('#' + id); if (!box) return;
   $$('button', box).forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === current ? 'true' : 'false'));
 }

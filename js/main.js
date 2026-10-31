@@ -4,8 +4,8 @@
 import { $, $$, el, toast, downloadText, downloadSvgAsPng } from './ui.js';
 import { pathDiagramSVG, conceptDiagramSVG } from './diagram.js';
 import { parseNameList, detectMissingCode, detectLikertColumns, distinctValues, parseDataFile, buildDat } from './data-parse.js';
-import { createModelSpec, looksLikeId } from './state.js';
-import { mountModelBuilder } from './model-builder.js';
+import { createModelSpec, looksLikeId, setDataOrdinal, setOrdinal } from './state.js';
+import { mountModelBuilder, segmented } from './model-builder.js';
 import { specSignature, applySavedSpec, saveSpecLocal, loadSpecLocal } from './spec-store.js';
 import { buildInp, requestedModels } from './syntax-generator.js';
 import { parseOut } from './out-parser.js';
@@ -112,7 +112,7 @@ function renderDataReview(data) {
   $('#data-intake').hidden = true;
   const host = $('#data-review'); host.hidden = false; host.innerHTML = '';
   $('#data-title').textContent = data.fileName || 'Data';
-  $('#data-lead').textContent = 'Columns are read in order. Check the names (they become the Mplus NAMES list), flag ordinal items, and declare the missing-value code — the Mplus-ready .dat is written for you.';
+  $('#data-lead').textContent = 'Columns are read in order. Check the names (they become the Mplus NAMES list), say whether the indicators are continuous or ordinal, and declare the missing-value code — the Mplus-ready .dat is written for you.';
 
   const body = el('div', { class: 'cc-body', style: { padding: '0' } });
 
@@ -126,20 +126,19 @@ function renderDataReview(data) {
   ], [btn('Different file', { size: 'btn-sm', icon: 'upload', onclick: resetData })]));
 
   data.missingHint = detectMissingCode(data);
-  // 2 · variable editor — names, ordinal flags; paste a whole name list instead of typing (Morin's request)
+  // 2 · variable editor — names, with the number of distinct values (the basis of the continuous / ordinal decision);
+  // paste a whole name list instead of typing (Morin's request)
   const list = el('div', { class: 'vlist' });
   const rerender = () => renderDataReview(data);
   data.varNames.forEach((name, i) => {
+    const nv = data._matrix ? distinctValues(data, name, 12).length : null;
     list.append(el('div', { class: 'vrow' }, [
       el('span', { class: 'idx' }, String(i + 1)),
       el('input', {
         value: name, class: 'input input-sm mono', 'aria-label': `name of column ${i + 1}`,
-        oninput: (e) => { data.varNames[i] = e.target.value.trim() || `V${i + 1}`; },
+        oninput: (e) => { data.varNames[i] = e.target.value.trim() || `V${i + 1}`; if (data.ordinal) setDataOrdinal(data, true); },
       }),
-      el('label', { class: 'cat', 'data-tip': 'Ordered-categorical item (thresholds, WLSMV)' }, [
-        el('input', { type: 'checkbox', class: 'box', checked: data.categorical.includes(name), onchange: (e) => toggleCategorical(data, name, i, e.target.checked) }),
-        'categorical',
-      ]),
+      el('span', { class: 'small muted', title: 'distinct values in this column' }, nv == null ? '' : nv >= 12 ? '12+ values' : `${nv} value${nv === 1 ? '' : 's'}`),
     ]));
   });
   const pasteBox = el('div', { hidden: true, style: { marginBottom: '12px' } });
@@ -149,23 +148,28 @@ function renderDataReview(data) {
     btn('Apply names', { size: 'btn-sm', kind: 'btn-primary', onclick: () => {
       const names = parseNameList(ta.value);
       if (names.length !== data.nCols) { pasteNote.textContent = `${names.length} names found, but the file has ${data.nCols} columns — paste one name per column.`; pasteNote.className = 'small'; pasteNote.style.color = '#7E2519'; return; }
-      const old = data.varNames.slice();
       data.varNames = names;
-      data.categorical = data.categorical.map((c) => names[old.indexOf(c)]).filter(Boolean);
+      setDataOrdinal(data, !!data.ordinal); // every column or none, under the new names
       toast(`${names.length} column names applied`, 'ok');
       rerender();
     } }),
     btn('Cancel', { size: 'btn-sm', onclick: () => { pasteBox.hidden = true; } }),
   ]), pasteNote);
+  // one decision for every item (Morin): continuous indicators → MLR with intercepts, ordinal → WLSMV with thresholds
+  const pickOrdinal = (on) => { setDataOrdinal(data, on); data.ordinalTouched = true; if (appState.spec && appState.spec.data === data) setOrdinal(appState.spec, on); rerender(); };
+  const indicators = el('div', { class: 'row', style: { marginBottom: '10px' } }, [
+    el('span', { class: 'lbl', style: { margin: '0' } }, 'Indicators'),
+    segmented('data-ind', [{ v: 'continuous', t: 'Continuous · MLR' }, { v: 'ordinal', t: 'Ordinal · WLSMV' }], data.ordinal ? 'ordinal' : 'continuous', (v) => pickOrdinal(v === 'ordinal')),
+    el('span', { class: 'small muted' }, data.ordinal ? 'every item: thresholds, WLSMV with THETA parameterization' : 'every item: intercepts, MLR'),
+  ]);
   const likert = detectLikertColumns(data, { ignore: [data.missingCode, data.missingHint?.code] }).filter((v) => !looksLikeId(data, v));
-  const suggest = likert.length >= 2 && !data.categorical.length
-    ? callout('info', [`${likert.length} columns look like ordinal (Likert) items — integer values with ${Math.max(...likert.map((v) => distinctValues(data, v, 12).length))} levels at most: ${likert.slice(0, 8).join(', ')}${likert.length > 8 ? ', …' : ''}. Flag them categorical and the models use thresholds with WLSMV; leave them unflagged to treat them as continuous (MLR). `,
-      btn('Flag them categorical', { size: 'btn-sm', onclick: () => { data.categorical = likert.slice(); toast(`${likert.length} columns flagged categorical`, 'ok'); rerender(); } })])
+  const maxLevels = likert.length ? Math.max(...likert.map((v) => distinctValues(data, v, 12).length)) : 0;
+  const suggest = likert.length >= 2 && !data.ordinal
+    ? callout('info', [`${likert.length} columns look like ordinal (Likert) items — integer values with ${maxLevels} levels at most: ${likert.slice(0, 8).join(', ')}${likert.length > 8 ? ', …' : ''}. Items with four or fewer response categories, or asymmetric thresholds, are better treated as ordinal — WLSMV with thresholds (Finney & DiStefano, 2013; Morin, 2023); with five or more roughly symmetric categories they can be treated as continuous (MLR). The choice applies to every item. `,
+      btn('Treat the indicators as ordinal', { size: 'btn-sm', onclick: () => { pickOrdinal(true); toast('All items are treated as ordinal — WLSMV with thresholds', 'ok'); } })])
     : null;
-  body.append(card(2, 'Variables', data.hasHeader ? 'Named from the header row. These names become the Mplus NAMES list.' : 'No header row: the columns are V1…Vn. Paste your names below (or export the file again with a first row of names).', [pasteBox, suggest, list].filter(Boolean), [
+  body.append(card(2, 'Variables', data.hasHeader ? 'Named from the header row. These names become the Mplus NAMES list.' : 'No header row: the columns are V1…Vn. Paste your names below (or export the file again with a first row of names).', [indicators, pasteBox, suggest, list].filter(Boolean), [
     btn('Paste names', { size: 'btn-sm', icon: 'edit', onclick: () => { pasteBox.hidden = !pasteBox.hidden; if (!pasteBox.hidden) ta.focus(); } }),
-    btn('All categorical', { size: 'btn-sm', onclick: () => { data.categorical = data.varNames.filter((v) => !looksLikeId(data, v)); rerender(); } }),
-    btn('None', { size: 'btn-sm', onclick: () => { data.categorical = []; rerender(); } }),
   ]));
 
   // 3 · missing values — its own card, with the code detected from the data (Morin lost time here)
@@ -197,12 +201,6 @@ function renderDataReview(data) {
   renderPaper();
 }
 
-function toggleCategorical(data, name, i, on) {
-  const v = data.varNames[i];
-  data.categorical = data.categorical.filter((x) => x !== v);
-  if (on) data.categorical.push(v);
-  renderDataBar();
-}
 function resetData() {
   $('#data-review').hidden = true; $('#data-intake').hidden = false;
   $('#data-title').textContent = 'Load the data';
@@ -212,19 +210,20 @@ function resetData() {
 }
 function continueToModel() {
   const data = appState.data;
-  data.categorical = [...new Set(data.categorical)];
+  setDataOrdinal(data, !!data.ordinal); // every column or none
   const sig = specSignature(data);
   let restored = null;
   if (appState.spec && appState.spec.signature === sig) {
-    // same columns: keep the sketch, adopt the Data-step edits (flags, missing code); the estimator follows the flags
+    // same columns: keep the sketch, adopt the Data-step edits (indicator type, missing code); the estimator follows
     appState.spec.data = data;
-    if (data.categorical.length && appState.spec.estimator === 'MLR') appState.spec.estimator = 'WLSMV';
+    setOrdinal(appState.spec, !!data.ordinal);
   } else {
     appState.spec = createModelSpec(data);
     appState.spec.signature = sig;
     const saved = loadSpecLocal(data); // the sketch remembered for this file (same name + columns)
     if (saved) { const r = applySavedSpec(appState.spec, saved); if (r.ok) restored = r; }
-    if (!restored && data.categorical.length) appState.spec.estimator = 'WLSMV';
+    // the remembered sketch carries its own indicator decision; it stands unless the Data step was set this time
+    setOrdinal(appState.spec, restored && !data.ordinalTouched ? appState.spec.estimator === 'WLSMV' : !!data.ordinal);
   }
   appState.builder = null;
   unlock('model');
@@ -1013,7 +1012,7 @@ async function onRunnerEvent(type, job, prev) {
 const SAMPLE_DATA = {
   fileName: 'ESEM.dat', mplusFile: 'ESEM.dat', needsMplusDat: false, delimiter: 'whitespace', hasHeader: false, nCols: 13, nRows: 4500,
   varNames: ['X1', 'X2', 'X3', 'X4', 'X5', 'X6', 'Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6', 'GV'],
-  categorical: [], missingCode: null,
+  categorical: [], ordinal: false, missingCode: null,
   preview: [
     ['0.66', '0.45', '0.46', '0.71', '0.43', '0.57', '0.51', '0.38', '0.49', '0.66', '0.40', '0.55', '1'],
     ['-1.2', '0.88', '1.13', '2.04', '0.92', '0.34', '0.77', '1.10', '0.21', '1.42', '0.88', '0.63', '1'],
@@ -1090,7 +1089,7 @@ async function loadExample(id) {
     const [text, saved] = await Promise.all([get(ex.file).then((r) => r.text()), get(ex.preset).then((r) => r.json())]);
     const data = parseDataFile(text, ex.file);
     data.varNames = ex.names.slice();
-    data.categorical = [];
+    setDataOrdinal(data, false);
     appState.data = data;
     appState.dataText = text;
     renderDataReview(data);
@@ -1098,6 +1097,7 @@ async function loadExample(id) {
     appState.spec.signature = specSignature(data);
     const r = applySavedSpec(appState.spec, saved);
     if (!r.ok) throw new Error('the model preset does not match the file');
+    setOrdinal(appState.spec, appState.spec.estimator === 'WLSMV');
     saveSpecLocal(appState.spec);
     appState.builder = null;
     unlock('model');

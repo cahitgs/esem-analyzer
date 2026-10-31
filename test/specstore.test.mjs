@@ -47,7 +47,7 @@ console.log('— serialize / apply round trip —');
   applySavedSpec(s3, savedCat);
   ok('without withData the data keeps its own categorical flags and missing code', d3.categorical.join() === 'm1' && d3.missingCode === '-9');
   applySavedSpec(s3, savedCat, { withData: true });
-  ok('withData applies the saved categorical flags and missing code', d3.categorical.length === 18 && d3.missingCode === '999', [d3.categorical.length, d3.missingCode]);
+  ok('withData applies the saved flags as one choice for every column (ordinal, WLSMV) and the missing code', d3.ordinal === true && d3.categorical.length === names.length && s3.estimator === 'WLSMV' && d3.missingCode === '999', [d3.categorical.length, d3.missingCode, s3.estimator]);
 }
 
 console.log('\n— time mode and signatures —');

@@ -69,9 +69,14 @@ export function applySavedSpec(spec, saved, { withData = false } = {}) {
   spec.recode = {};
   if (saved.recode && typeof saved.recode === 'object') for (const [col, m] of Object.entries(saved.recode)) if (names.has(col) && m && typeof m === 'object') spec.recode[col] = { ...m };
   if (withData && spec.data) {
-    spec.data.categorical = keep(saved.categorical);
+    // the indicators are all continuous or all ordinal (one choice for every item): a saved list that flags some
+    // columns, or a saved WLSMV estimator, means ordinal for all of them
+    const ordinal = keep(saved.categorical).length > 0 || saved.estimator === 'WLSMV';
+    spec.data.ordinal = ordinal;
+    spec.data.categorical = ordinal ? (spec.data.varNames || []).slice() : [];
     if (saved.missingCode !== undefined) spec.data.missingCode = saved.missingCode;
   }
+  if (spec.data?.ordinal && spec.estimator !== 'WLSMV') spec.estimator = 'WLSMV'; // the data's decision wins over an older estimator
   return { ok: true, dropped };
 }
 

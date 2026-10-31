@@ -305,7 +305,6 @@ export const INV_META = {
 // the latent-mean test), and alphanumeric equality labels (i# intercepts, u# uniquenesses,
 // cov# covariances). Loadings are invariant by default from weak onward (BY omitted in groups).
 function buildInvariance(spec, step) {
-  if (isMixedInvariance(spec)) return buildInvarianceMixed(spec, step, 'esem');
   if (isCategoricalInvariance(spec)) return buildInvarianceCategorical(spec, step);
   const items = spec.items, N = items.length, ids = factorIds(spec);
   const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
@@ -434,7 +433,6 @@ function buildInvarianceCategorical(spec, step) {
 // group's variances AND equate ALL factor covariances (G pairs included) — Mplus rejects a
 // variances-only refix for an EFA set.
 function buildInvarianceBifactorEsem(spec, step) {
-  if (isMixedInvariance(spec)) return buildInvarianceMixed(spec, step, 'besem');
   if (isCategoricalInvariance(spec)) return buildInvarianceBifactorEsemCategorical(spec, step);
   const items = spec.items, N = items.length, ids = factorIds(spec);
   const all = ['G', ...ids];
@@ -568,7 +566,6 @@ function cfaFamily(spec, bifactor) {
 }
 
 function buildInvarianceCfaFamily(spec, step, bifactor) {
-  if (isMixedInvariance(spec)) return buildInvarianceMixed(spec, step, bifactor ? 'bcfa' : 'cfa');
   if (isCategoricalInvariance(spec)) return buildInvarianceCfaFamilyCategorical(spec, step, bifactor);
   const items = spec.items, N = items.length;
   const { by, covLabels, varFix, meanFix, varFree, meanFree, title, iterations } = cfaFamily(spec, bifactor);
@@ -626,86 +623,6 @@ function buildInvarianceCfaFamilyCategorical(spec, step, bifactor) {
     ...headerBlocks(spec, { rotation: false, parameterization: 'THETA', iterations, difftestIn, grouping: true }),
     'MODEL:', ...main,
   ];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
-  lines.push(...outputBlock(spec));
-  if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
-  return lines.join('\n') + '\n';
-}
-
-// ---------- Multi-group invariance with MIXED indicators (continuous + ordinal; WLSMV / THETA) ----------
-// Some items flagged categorical, the others continuous — the case Morin asked about. One chain per measurement
-// model: the ordinal items follow the thresholds/THETA rules of the categorical chains (first thresholds plus one
-// referent's second threshold per factor equated from the configural model on; uniquenesses fixed at 1 in the
-// reference group and free elsewhere until the strict step), the continuous items follow the intercept chain
-// (intercepts free per group until scalar, residual variances free until strict). A factor's latent mean is free in
-// the other groups from the configural model on when the factor owns an ordinal referent (≥ 3 categories), else
-// from the scalar step on, as in the continuous chain. DIFFTEST chains the adjacent steps with the family's files.
-function isMixedInvariance(spec) {
-  const cat = spec.data?.categorical || [];
-  const n = spec.items.filter((it) => cat.includes(it)).length;
-  return n > 0 && n < spec.items.length;
-}
-// the measurement block and the identification pieces of one family (ESEM, bifactor-ESEM, CFA, bifactor-CFA)
-function mgFamily(spec, fam) {
-  const ids = factorIds(spec), items = spec.items;
-  const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
-  if (fam === 'esem') return { by: esemByBlocks(spec, '(*1)'), all: ids, bifactor: false, range, header: { rotation: true, iterations: 10000 }, title: 'MG invariance', diffPrefix: 'Inv', cov: true };
-  if (fam === 'besem') {
-    const by = [stmt(['G BY', ...items, '(*1)']), ...spec.factors.map((f) => stmt([`${f.id} BY`, ...items.map((it) => (spec.target[it]?.[f.id] ? it : `${it}~0`)), '(*1)']))];
-    return { by, all: ['G', ...ids], bifactor: true, range, header: { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', iterations: 100000 }, title: 'MG invariance (bifactor-ESEM)', diffPrefix: 'BifactorInv', cov: true };
-  }
-  const c = cfaFamily(spec, fam === 'bcfa');
-  return { by: c.by, all: fam === 'bcfa' ? ['G', ...ids] : ids, bifactor: fam === 'bcfa', range, header: { rotation: false, iterations: c.iterations }, title: `MG invariance (${c.title})`, diffPrefix: c.diffPrefix, cov: fam !== 'bcfa' };
-}
-function buildInvarianceMixed(spec, step, fam) {
-  const F = mgFamily(spec, fam);
-  const catSet = new Set(spec.data.categorical || []);
-  const catItems = spec.items.filter((it) => catSet.has(it)), contItems = spec.items.filter((it) => !catSet.has(it));
-  const counts = thresholdCounts(spec, catItems);
-  const { refs: refsAll, byFactor, gRef } = thresholdReferents(spec, counts, { general: F.bifactor });
-  // a latent mean is identified from the configural model on only through an ordinal referent; Mplus requires the
-  // means of one EFA set to be all free or all fixed, so an ESEM / bifactor-ESEM set uses the referent rule only
-  // when every factor of the set has one — otherwise its means stay at 0 until the scalar step (continuous rule)
-  // and the referent second thresholds stay free until then too (identification then comes from the fixed means)
-  let early = new Set(F.all.filter((id) => (id === 'G' ? !!gRef : !!byFactor[id])));
-  const efaSet = fam === 'esem' || fam === 'besem';
-  const refs = efaSet && early.size < F.all.length ? new Set() : refsAll;
-  if (efaSet && early.size < F.all.length) early = new Set();
-  const thrPartial = thresholdLines(spec, 'partial', counts, refs, catItems);
-  const thrAll = thresholdLines(spec, 'all', counts, refsAll, catItems);
-  const bracket = (list) => (list.length > 1 ? stmt([`[${list[0]}`, ...list.slice(1, -1), `${list[list.length - 1]}]`]) : `[${list[0]}];`);
-  const intFree = bracket(contItems);                                   // continuous intercepts: free per group until scalar
-  const intInv = chunkLabeled(contItems, 'i', true);
-  const uniqContFree = stmt(contItems);
-  const uniqContInv = chunkLabeled(contItems, 'u', false);
-  const uniqCatFix = wrapList(catItems.map((it) => `${it}@1;`));         // THETA: ordinal uniquenesses fixed in the reference group
-  const uniqCatFree = wrapList(catItems.map((it) => `${it}*;`));
-  const varFix = F.bifactor ? `G@1; ${F.range}@1;` : `${F.range}@1;`;
-  const meanFixAll = F.bifactor ? `[G@0]; [${F.range}@0];` : `[${F.range}@0];`;
-  const varFree = wrapList(F.all.map((id) => `${id}*;`));
-  const meanFreeAll = wrapList(F.all.map((id) => `[${id}*];`));
-  const meanEarly = wrapList(F.all.map((id) => (early.has(id) ? `[${id}*];` : `[${id}@0];`)));
-  const covLabels = [];
-  if (F.cov) { let c = 1; for (let i = 0; i < F.all.length; i++) for (let j = i + 1; j < F.all.length; j++) covLabels.push(`${F.all[i]} WITH ${F.all[j]} (cov${c++});`); }
-  const by = F.by;
-
-  let main, grp;
-  switch (step) {
-    case 'configural': main = [...by, varFix, meanFixAll, thrPartial, intFree, uniqCatFix, uniqContFree]; grp = [...by, varFix, meanEarly, thrPartial, intFree, uniqCatFree, uniqContFree]; break;
-    case 'metric':     main = [...by, varFix, meanFixAll, thrPartial, intFree, uniqCatFix, uniqContFree]; grp = [varFree, meanEarly, thrPartial, intFree, uniqCatFree, uniqContFree]; break;
-    case 'scalar':     main = [...by, varFix, meanFixAll, thrAll, intInv, uniqCatFix, uniqContFree];      grp = [varFree, meanFreeAll, thrAll, intInv, uniqCatFree, uniqContFree]; break;
-    case 'strict':     main = [...by, varFix, meanFixAll, thrAll, intInv, uniqCatFix, uniqContInv];       grp = [varFree, meanFreeAll, thrAll, intInv, uniqCatFix, uniqContInv]; break;
-    case 'varcov':     main = [...by, varFix, ...covLabels, meanFixAll, thrAll, intInv, uniqCatFix, uniqContInv]; grp = [varFix, ...covLabels, meanFreeAll, thrAll, intInv, uniqCatFix, uniqContInv]; break;
-    case 'latentmean': main = [...by, varFix, ...covLabels, meanFixAll, thrAll, intInv, uniqCatFix, uniqContInv]; grp = [varFix, ...covLabels, meanFixAll, thrAll, intInv, uniqCatFix, uniqContInv]; break;
-    default: throw new Error(`Unknown invariance step: ${step}`);
-  }
-
-  const seq = spec.groups.invariance?.sequence || INV_SEQUENCE;
-  const pos = seq.indexOf(step);
-  const chained = /MV$/i.test(spec.estimator || '');
-  const difftestIn = chained && pos > 0 ? diffTestName(seq[pos - 1], F.diffPrefix) : null;
-  const difftestOut = chained && pos >= 0 && pos < seq.length - 1 ? diffTestName(step, F.diffPrefix) : null;
-  const lines = [...titleLine(`${F.title} - ${INV_META[step].label}`), ...headerBlocks(spec, { ...F.header, parameterization: 'THETA', difftestIn, grouping: true }), 'MODEL:', ...main];
   for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
   lines.push(...outputBlock(spec));
   if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
@@ -1104,4 +1021,4 @@ export function maxLineLength(inp) {
   return inp.split('\n').reduce((m, l) => Math.max(m, l.length), 0);
 }
 
-export { isCategoricalInvariance, isCategoricalLongitudinal, isMixedInvariance, diffTestName };
+export { isCategoricalInvariance, isCategoricalLongitudinal, diffTestName };

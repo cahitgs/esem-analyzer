@@ -90,6 +90,22 @@ export function looksLikeId(data, name) {
 }
 
 /** Resize factors to k, preserving existing labels, and (re)seed the target matrix block-diagonally. */
+/** One decision for every item (Morin's rule): the indicators are all continuous (MLR, intercepts) or all ordinal
+ *  (WLSMV, thresholds). The data carries the choice; `categorical` then lists every column or none, so the generator,
+ *  the sparse-category check and the residual aids keep reading the list they always read. */
+export function setDataOrdinal(data, on) {
+  if (!data) return data;
+  data.ordinal = !!on;
+  data.categorical = on ? (data.varNames || []).slice() : [];
+  return data;
+}
+export function setOrdinal(spec, on) {
+  setDataOrdinal(spec.data, on);
+  spec.estimator = on ? 'WLSMV' : 'MLR';
+  if (on && spec.aids) spec.aids.positiveResiduals = []; // residual variances are not free parameters under the categorical model
+  return spec;
+}
+
 export function setFactorCount(spec, k) {
   k = Math.max(1, Math.min(k, Math.max(1, spec.items.length - 1)));
   const old = spec.factors;
@@ -550,7 +566,18 @@ export function validateSpec(spec) {
 
   for (const it of spec.items) if (looksLikeId(spec.data, it)) warnings.push(`${it} looks like a case identifier (unique consecutive integers) — remove it from the items. As an indicator it has no common variance, and the scalar invariance step will not converge.`);
 
-  if (spec.estimator === 'WLSMV' && spec.data.categorical.length === 0) warnings.push('WLSMV is selected but no items are flagged categorical.');
+  if (spec.estimator === 'WLSMV' && spec.data.categorical.length === 0) warnings.push('WLSMV is selected but the indicators are treated as continuous — choose Ordinal · WLSMV or Continuous · MLR under Rotation & estimator.');
+  // the indicators are all continuous or all ordinal (one choice for every item); a partial list can only come from an
+  // edited .json — refuse it for every chain (the longitudinal check below names the wave columns instead)
+  if (!spec.longitudinal?.enabled) {
+    const flagged = spec.items.filter((it) => spec.data.categorical.includes(it));
+    if (flagged.length && flagged.length < spec.items.length) errors.push(`${flagged.length} of the ${spec.items.length} items are flagged ordinal and the rest continuous. The indicators are treated all alike — choose Ordinal · WLSMV (thresholds) or Continuous · MLR (intercepts) under Rotation & estimator.`);
+  }
+  if (spec.items.length && spec.items.every((it) => spec.data.categorical.includes(it))) {
+    // Mplus allows at most 10 categories for a categorical variable
+    const many = spec.items.map((it) => [it, categoryCounts(spec, it).size]).filter(([, n]) => n > 10);
+    if (many.length) errors.push(`${many.slice(0, 3).map(([it, n]) => `${it} shows ${n} distinct values`).join(', ')}${many.length > 3 ? ', …' : ''} — Mplus allows at most 10 categories for an ordinal indicator. Treat the indicators as continuous (MLR), or merge categories first.`);
+  }
   const hint = spec.data.missingHint;
   if (hint && (spec.data.missingCode == null || spec.data.missingCode === '')) warnings.push(`${hint.code} appears in ${hint.columns} columns (${hint.cells} cells) and looks like a missing-value code, but none is declared — Mplus would read it as a real score. Set it on the Data step (Missing values card).`);
 
@@ -560,15 +587,10 @@ export function validateSpec(spec) {
     if ((spec.groups.codes?.length || 0) < 2) errors.push('The grouping variable needs at least two groups.');
     if ((spec.groups.invariance.sequence?.length || 0) === 0) errors.push('Select at least one invariance step (start with Configural).');
     const catItems = spec.items.filter((it) => spec.data.categorical.includes(it));
-    if (catItems.length && catItems.length < spec.items.length) {
-      // mixed indicators: thresholds/THETA for the ordinal items, intercepts for the continuous ones — WLSMV only
-      if (!/MV$/i.test(spec.estimator || '')) errors.push(`Mixed indicators (${catItems.length} ordinal, ${spec.items.length - catItems.length} continuous) run the thresholds/THETA sequence, which Mplus offers for WLSMV, not ${spec.estimator}. Switch the estimator to WLSMV, or unflag the items.`);
-      else if (spec.modelTypes.bifactorEsem) errors.push(`Mixed indicators are generated for the CFA, ESEM and bifactor-CFA sequences; the bifactor-ESEM sequence with mixed indicators is not identified in Mplus (its scalar step has an unidentified factor variance). Uncheck Bifactor-ESEM, or flag all items ordinal or all continuous.`);
-      else warnings.push(`Mixed indicators: the ${catItems.length} ordinal items get thresholds (first thresholds and one referent's second threshold per factor equated from the configural model on), the ${spec.items.length - catItems.length} continuous items get intercepts. Δχ² comes from Mplus DIFFTEST — run the generated models in order, in the same folder.`);
-    } else if (catItems.length === spec.items.length && spec.items.length > 0) {
+    if (catItems.length === spec.items.length && spec.items.length > 0) {
       // the thresholds chain is written with PARAMETERIZATION = THETA and the DIFFTEST handshake, which Mplus
       // provides for the weighted least squares estimators only — refuse rather than emit syntax Mplus rejects
-      if (!/MV$/i.test(spec.estimator || '')) errors.push(`The thresholds-based invariance sequence for categorical items uses PARAMETERIZATION = THETA and DIFFTEST, which Mplus offers for WLSMV, not ${spec.estimator}. Switch the estimator to WLSMV, or unflag the items to run the intercepts-based chain.`);
+      if (!/MV$/i.test(spec.estimator || '')) errors.push(`The thresholds-based invariance sequence for categorical items uses PARAMETERIZATION = THETA and DIFFTEST, which Mplus offers for WLSMV, not ${spec.estimator}. Choose Ordinal · WLSMV under Rotation & estimator (the chain needs WLSMV), or Continuous · MLR for the intercepts-based chain.`);
       warnings.push('Categorical invariance: Δχ² comes from Mplus DIFFTEST — run the generated models in order, in the same folder, so each step finds the previous step\'s Inv_diff_*.dat (and BifactorInv_diff_*.dat) file.');
       // Morin's thresholds identification needs one referent item with ≥ 3 categories per factor (and one
       // more for the G factor of the bifactor chain); without it the configural/metric models are not identified.
@@ -603,9 +625,9 @@ export function validateSpec(spec) {
     const waveCols = [...(w1 || []), ...(w2 || [])];
     const catLong = waveCols.filter((v) => spec.data.categorical.includes(v));
     if (catLong.length && catLong.length < waveCols.length) {
-      errors.push(`${catLong.length} of the ${waveCols.length} wave columns are flagged categorical — flag all of them for the thresholds-based (WLSMV) sequence across time, or none for the intercept-based one.`);
+      errors.push(`${catLong.length} of the ${waveCols.length} wave columns are flagged ordinal and the rest continuous. The indicators are treated all alike — choose Ordinal · WLSMV (thresholds) or Continuous · MLR (intercepts) under Rotation & estimator.`);
     } else if (catLong.length && w1?.length && w2?.length === w1.length) {
-      if (!/MV$/i.test(spec.estimator || '')) errors.push(`The thresholds-based longitudinal sequence uses PARAMETERIZATION = THETA and DIFFTEST, which Mplus offers for WLSMV, not ${spec.estimator}. Switch the estimator to WLSMV, or unflag the items.`);
+      if (!/MV$/i.test(spec.estimator || '')) errors.push(`The thresholds-based longitudinal sequence uses PARAMETERIZATION = THETA and DIFFTEST, which Mplus offers for WLSMV, not ${spec.estimator}. Choose Ordinal · WLSMV under Rotation & estimator, or Continuous · MLR.`);
       const c1 = thresholdCounts(spec, w1), c2 = thresholdCounts(spec, w2);
       const diff = w1.map((it, p) => [it, w2[p]]).filter(([a, b]) => c1[a] !== c2[b]);
       if (diff.length) errors.push(`${diff.slice(0, 3).map(([a, b]) => `${a} has ${c1[a] + 1} categories but ${b} has ${c2[b] + 1}`).join('; ')}${diff.length > 3 ? '; …' : ''} — an item must show the same categories at both waves for its thresholds to be equated. Collapse the sparse categories on the Model step, or treat the items as continuous.`);
