@@ -35,6 +35,9 @@ function goStep(step) {
   // Coming back to the Model step: re-validate, because the Data step may have changed the categorical
   // flags (the spec shares that data object) — otherwise a stale error/verdict would sit in the step bar.
   if (step === 'model') appState.builder?.refresh?.();
+  // Coming back to the Syntax step: the Results step may have added a partial-invariance branch (or cleared one) —
+  // redraw the file list when the set of requested models changed.
+  if (step === 'syntax' && appState.spec && appState.syntaxModels && requestedModels(appState.spec).length !== appState.syntaxModels.length) renderSyntaxStep();
   renderPaper();
   const ids = step === 'results' && appState.resultSections.length ? [appState.resultSections[0].id] : FOCUS[step];
   paper.focus(ids, true);
