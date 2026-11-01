@@ -17,7 +17,6 @@ results as it finishes — nothing to download or upload. The online page can us
 links to it on localhost and remembers the choice. A first-visit **Guide** explains the four steps and both ways.
 
 > **▶ Try it live (no install): https://cahitgs.github.io/esem-analyzer/**
-> &nbsp;·&nbsp; **Guided demo (worked example): https://cahitgs.github.io/esem-analyzer/demo.html**
 
 ![Model builder — Λ target-pattern matrix, live syntax, conceptual diagram](docs/img/02-model-builder.png?v=9)
 

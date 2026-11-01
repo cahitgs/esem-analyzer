@@ -33,7 +33,7 @@ export function openGuide() {
   if (!dlg.open) dlg.showModal();
 }
 export function updateGuide() { if (dlg && dlg.open) render(); }
-/** First visit only (not for demo / dev deep links). */
+/** First visit only (not for the ?dev= and ?example= deep links). */
 export function autoOpenGuide() {
   let seen = false;
   try { seen = localStorage.getItem(SEEN) === '1'; } catch { /* storage may be unavailable */ }

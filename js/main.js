@@ -45,7 +45,7 @@ function goStep(step) {
 function unlock(step) { appState.reached[step] = true; goStep(step); }
 /** Where a placeholder's button should go: the step it names if reachable, else the furthest reached step. */
 const NEED = { data: 'Load data first', model: 'Sketch the model first', syntax: 'Generate syntax first', results: 'Add .out files' };
-// Model and Syntax only make sense with a sketched model (demo / "skip to results" sessions have none)
+// Model and Syntax only make sense with a sketched model ("skip to results" sessions have none)
 const reachable = (s) => !!appState.reached[s] && (s === 'data' || s === 'results' || !!appState.spec);
 function goTarget(step) {
   if (reachable(step)) return { step, label: step === appState.step ? NEED[step] : `Go to ${STEP_LABEL[step]}` };
@@ -1137,26 +1137,6 @@ async function devBootstrap(which) {
   }
 }
 
-// Public demo mode: load the bundled 3-factor example .out files straight into Results so a
-// first-time visitor sees real APA tables, diagrams, and the ESEM-within-CFA card in one click.
-// (Distinct from the developer-only `?dev=` fixtures.)
-const DEMO_SETS = {
-  results: ['1_CFA.out', '2_ESEM_geomin.out', '5_Bifactor_ESEM.out'],
-  measurement: ['1_CFA.out', '2_ESEM_geomin.out', '3_ESEM_target.out', '4_Bifactor_CFA.out', '5_Bifactor_ESEM.out'],
-  esem: ['2_ESEM_geomin.out'],
-  target: ['3_ESEM_target.out'],
-  bifactorcfa: ['4_Bifactor_CFA.out'],
-  bifactor: ['5_Bifactor_ESEM.out'],
-  ewc: ['2_ESEM_geomin.out'],
-  invariance: ['inv_1_configural.out', 'inv_2_metric.out', 'inv_3_scalar.out', 'inv_4_strict.out', 'inv_5_varcov.out', 'inv_6_latentmean.out'],
-  // 2-wave (12 items × 2) well-being example: ESEM + bifactor-ESEM longitudinal sequences.
-  longitudinal: [
-    'LongInv_esem_1_configural.out', 'LongInv_esem_2_metric.out', 'LongInv_esem_3_scalar.out',
-    'LongInv_esem_4_strict.out', 'LongInv_esem_5_varcov.out', 'LongInv_esem_6_latentmean.out',
-    'LongInv_besem_1_configural.out', 'LongInv_besem_2_metric.out', 'LongInv_besem_3_scalar.out',
-    'LongInv_besem_4_strict.out', 'LongInv_besem_5_varcov.out', 'LongInv_besem_6_latentmean.out',
-  ],
-};
 // ============================ Example data (the article's two data sets) ============================
 // Morin's (2023) Ch27 data sets with the model of the tutorial: the file, the variable names and the sketch
 // load in one step (Data page card or ?example=data1|data2), then Generate syntax reproduces the article's inputs.
@@ -1194,44 +1174,6 @@ async function loadExample(id) {
   }
 }
 
-async function demoBootstrap(which) {
-  // Model / Syntax: rebuild the 3-factor example spec from the bundled data file so the
-  // builder and the generated syntax are shown on the same 15-item / 3-factor example.
-  if (which === 'model' || which === 'syntax') {
-    try {
-      const text = await fetch('example-dataset/data.dat').then((r) => r.text());
-      const data = parseDataFile(text, 'data.dat');
-      appState.dataText = text;
-      data.varNames = Array.from({ length: 15 }, (_, i) => 'i' + (i + 1)).concat('gender');
-      data.mplusFile = 'data.dat';
-      appState.data = data;
-      const spec = createModelSpec(data);
-      spec.items = data.varNames.slice(0, 15);
-      spec.factors = [1, 2, 3].map((i) => ({ id: 'F' + i, label: 'F' + i }));
-      spec.target = {};
-      spec.items.forEach((it, i) => { spec.target[it] = {}; spec.factors.forEach((f, fi) => { spec.target[it][f.id] = fi === Math.floor(i / 5); }); });
-      spec.rotation = { type: 'GEOMIN', oblique: true, epsilon: 0.5 };
-      appState.spec = spec;
-      renderDataReview(data);
-      appState.builder = null; unlock('model'); appState.builder = mountModelBuilder($('#model-host'), spec, { onChange: onModelChange, onBack: () => goStep('data') });
-      if (which === 'syntax') { unlock('syntax'); renderSyntaxStep(); goStep('syntax'); }
-    } catch { toast('Demo: could not load data.dat', 'err'); }
-    return;
-  }
-  // Results: load the bundled 3-factor .out files straight into Results.
-  appState.reached.model = appState.reached.syntax = true;
-  unlock('results'); renderResultsStep();
-  const files = DEMO_SETS[which] || DEMO_SETS.results;
-  for (const n of files) {
-    try {
-      const t = await fetch('example-dataset/' + n).then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); });
-      const p = parseOut(t);
-      appState.parsed.push({ label: deriveLabel(p, n), parsed: p, fileName: n, raw: t });
-    } catch { toast(`Demo: could not load ${n}`, 'err'); }
-  }
-  renderResultsOutput();
-}
-
 // ============================ init ============================
 function init() {
   $$('#stepper .trk').forEach((b) => b.addEventListener('click', () => goStep(b.dataset.step)));
@@ -1251,9 +1193,8 @@ function init() {
   const params = new URLSearchParams(location.search);
   $('#ex-load-data1')?.addEventListener('click', () => loadExample('data1'));
   $('#ex-load-data2')?.addEventListener('click', () => loadExample('data2'));
-  const demo = params.get('demo'), dev = params.get('dev'), example = params.get('example');
-  if (demo) demoBootstrap(demo);
-  else if (dev) devBootstrap(dev);
+  const dev = params.get('dev'), example = params.get('example');
+  if (dev) devBootstrap(dev);
   else if (example) loadExample(example);
   else autoOpenGuide();
 }

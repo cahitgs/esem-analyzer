@@ -14,8 +14,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argName = process.argv.indexOf('--name');
 const NAME = argName > 0 ? process.argv[argName + 1] : 'ESEM-Analyzer';
 const SERVER = path.join(ROOT, 'serve.mjs');
-// what the exe serves: the app shell, styles, modules, fonts, the guided demo and its pictures, the example data
-const INCLUDE = ['index.html', 'demo.html', 'css', 'js', 'example-dataset', 'docs/img'];
+// what the exe serves: the app shell, styles, modules, the example data
+const INCLUDE = ['index.html', 'css', 'js', 'example-dataset'];
 const EXT = new Set(['.html', '.css', '.js', '.mjs', '.json', '.csv', '.dat', '.out', '.inp', '.txt', '.md', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.ico', '.woff', '.woff2']);
 const FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 

@@ -43,5 +43,3 @@ lives on G only (specific-factor means ≈ 0).
 3. Drop all six `inv_*.out` together → an invariance table with Satorra–Bentler Δχ², ΔCFI / ΔTLI / ΔRMSEA verdicts.
 4. Drop all twelve `LongInv_*.out` together → two longitudinal comparison tables (ESEM and bifactor-ESEM).
 5. To build syntax from scratch: **Data** → `data.dat` → **Model** (3 factors, i1–i5 → F1, i6–i10 → F2, i11–i15 → F3).
-
-A guided walkthrough of all of this is at [`/demo.html`](../demo.html).
