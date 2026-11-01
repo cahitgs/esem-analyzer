@@ -155,7 +155,9 @@ section('longitudinal chains: the pair freed at both waves (Morin T34), CFA load
   setPartial(spec, 'time', 'besem', 'scalar', ['z2_t1']);
   const p = buildInp(spec, 'linv:besem:scalar@p');
   ok('bifactor-ESEM partial strong: z2 free at both waves between the labelled runs', / z1_t1\] \(i1-i9\);\n\[z2_t1\*\];\n\[z3_t1 z4_t1\] \(i11-i12\);/.test(p) && / z1_t2\] \(i1-i9\);\n\[z2_t2\*\];\n\[z3_t2 z4_t2\] \(i11-i12\);/.test(p), p);
-  ok('title tag on a longitudinal title names both waves of the pair', /Longitudinal invariance \(bifactor-ESEM\) - Strong \(intercepts\) \[partial strong: z2_t1\/z2_t2\]/.test(p), p.split('\n')[1]);
+  const titleLines = p.split('\n').slice(1, p.split('\n').indexOf('DATA:'));
+  ok('title tag on a longitudinal title names both waves of the pair', titleLines.join(' ') === 'Longitudinal invariance (bifactor-ESEM) - Strong (intercepts) [partial strong: z2_t1/z2_t2]', titleLines);
+  ok('a title longer than Mplus\'s 90-character input line is wrapped at a space (Mplus would drop the end of the tag)', titleLines.length === 2 && titleLines.every((l) => l.length <= 90) && titleLines[1] === 'z2_t1/z2_t2]', titleLines);
   ok('modIndexFor is case-insensitive and takes the larger index of a pair', modIndexFor({ modIndices: { entries: [{ kind: 'MEAN', a: 'Z2_T1', mi: 183.4 }, { kind: 'MEAN', a: 'Z2_T2', mi: 617.7 }] } }, 'scalar', 'z2_t1/z2_t2') === 617.7 && modIndexFor({ modIndices: { entries: [{ kind: 'MEAN', a: 'Z2', mi: 5 }] } }, 'scalar', 'z2') === 5);
   const lm = buildInp(spec, 'linv:besem:latentmean@p');
   ok('latent means@p keeps z2 free, refixes the Time-2 means (G2 included)', (lm.match(/\[z2_t[12]\*\];/g) || []).length === 2 && /\[F4-F6@0\];\n\[G2@0\];/.test(lm));
@@ -199,6 +201,11 @@ section('parser: the title tag and the modification indices');
   ok('splitBranchTag: partial step with ids', JSON.stringify(splitBranchTag('Strict (residuals) [partial strong: Z2, Y4; without var-cov]')) === JSON.stringify({ invStep: 'Strict (residuals)', invBranch: { partial: { scalar: ['Z2', 'Y4'] }, counts: {}, skipped: ['varcov'], text: 'partial strong: Z2, Y4; without var-cov' } }), splitBranchTag('Strict (residuals) [partial strong: Z2, Y4; without var-cov]'));
   ok('splitBranchTag: a count-only tag', splitBranchTag('Strong (thresholds) [partial strong: 3 freed]').invBranch.counts.scalar === 3 && splitBranchTag('Strong (thresholds) [partial strong: 3 freed]').invBranch.partial.scalar.length === 0);
   ok('splitBranchTag: no tag → no branch', splitBranchTag('Weak (loadings)').invBranch === null && splitBranchTag('Weak (loadings)').invStep === 'Weak (loadings)');
+  // the real output of the Data 2 partial strong model: its 91-character title was written on two lines by the generator
+  const raw3p = fx('v91_LongInv_besem_3p_scalar.out');
+  ok('fixture: the TITLE spans two lines in the Mplus output (a 91-character line would have been cut at 90)', /\[partial strong:\r?\nz2_t1\/z2_t2\]/.test(raw3p));
+  const twoLine = parseOut(raw3p);
+  ok('a TITLE written on two lines is joined before the tag is read', twoLine.title === 'Longitudinal invariance (bifactor-ESEM) - Strong (intercepts) [partial strong: z2_t1/z2_t2]' && twoLine.invStep === 'Strong (intercepts)' && twoLine.invBranch?.partial.scalar.join() === 'z2_t1/z2_t2' && invarianceLabel(twoLine) === 'Partial strong (z2_t1/z2_t2 intercept free)', [twoLine.title, invarianceLabel(twoLine)]);
   const p = parseOut(fx('v91_Inv_3_scalar.out'));
   ok('a real strong-step output: modification indices parsed (groups, intercepts)', p.modIndices && p.modIndices.entries.length > 0 && p.modIndices.entries.some((e) => e.kind === 'MEAN' && e.group === 'G1') && p.modIndices.entries.some((e) => e.kind === 'MEAN' && e.group === 'G2'), p.modIndices?.entries?.slice(0, 3));
   ok('every entry carries a numeric M.I.; the minimum printed is read', p.modIndices.entries.every((e) => Number.isFinite(e.mi)) && p.modIndices.min === 10, p.modIndices.min);
@@ -286,7 +293,7 @@ section('real Mplus 9.1.1 runs: Data 2 bifactor-ESEM across time (z2 freed) and 
 {
   const strong = parseOut(fx('v91_LongInv_besem_3_scalar.out')), p3 = parseOut(fx('v91_LongInv_besem_3p_scalar.out')), p6 = parseOut(fx('v91_LongInv_besem_6p_latentmean.out'));
   ok('Data 2: full strong 3427.376 (204) with CONVERGENCE = .005, partial strong 217.187 (203) and latent means 2699.858 (229) without it (Table 27.1)', apa2(strong.fit.chi2) === '3427.38' && strong.fit.df === 204 && apa2(p3.fit.chi2) === '217.19' && p3.fit.df === 203 && apa2(p6.fit.chi2) === '2699.86' && p6.fit.df === 229, [strong.fit.chi2, p3.fit.chi2, p6.fit.chi2]);
-  ok('Data 2: longitudinal titles, the pair named in the tag', strong.invKind === 'longitudinal' && strong.invModel === 'besem' && invarianceLabel(p3) === 'Partial strong (z2_t1 intercept free)' && p6.invBranch.partial.scalar.join() === 'z2_t1', invarianceLabel(p3));
+  ok('Data 2: longitudinal titles, the pair named in the tag', strong.invKind === 'longitudinal' && strong.invModel === 'besem' && invarianceLabel(p3) === 'Partial strong (z2_t1/z2_t2 intercept free)' && p6.invBranch.partial.scalar.join() === 'z2_t1/z2_t2', invarianceLabel(p3));
   ok('Data 2: the latent-means model goes beyond the guideline, as in the chapter', invarianceSeries([{ label: invarianceLabel(strong), parsed: strong }, { label: invarianceLabel(p3), parsed: p3 }, { label: invarianceLabel(p6), parsed: p6 }])[2].dec.ok === false);
   const c3 = parseOut(fx('v91_cat_Inv_3_scalar.out')), c3p = parseOut(fx('v91_cat_Inv_3p_scalar.out')), c4p = parseOut(fx('v91_cat_Inv_4p_strict.out'));
   ok('ordinal chain: WLSMV, the partial strong model three df lower (three of duy2_t1\'s four thresholds freed)', /WLSMV/.test(c3p.estimator) && c3.fit.df === 126 && c3p.fit.df === 123 && c4p.fit.df === 135, [c3.fit.df, c3p.fit.df, c4p.fit.df]);

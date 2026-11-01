@@ -170,7 +170,18 @@ function outputBlock(spec, { svalues = false } = {}) {
   return ['OUTPUT:', stmt(words)];
 }
 
-function titleLine(text) { return ['TITLE:', text]; }
+/** TITLE lines. Mplus reads 90 characters per input line and drops the rest, which would cut a long branch tag
+ *  ("[partial strong: z2_t1/z2_t2]" on a longitudinal title), so a long title is wrapped at spaces into lines of
+ *  at most 90 characters; the parser joins the title lines back together. */
+function titleLine(text) {
+  const out = [];
+  let line = '';
+  for (const word of String(text).split(' ')) {
+    if (line && line.length + 1 + word.length > 90) { out.push(line); line = word; } else line = line ? `${line} ${word}` : word;
+  }
+  if (line) out.push(line);
+  return ['TITLE:', ...out];
+}
 /** " [Time 1]" on the single-group measurement models when they are estimated on the Time-1 indicators of a longitudinal design. */
 function waveTitleTag(spec) {
   return spec.longitudinal?.enabled && spec.longitudinal.waves?.[0]?.length ? ` [${spec.longitudinal.waveLabels?.[0] || 'Time 1'}]` : '';

@@ -175,10 +175,15 @@ export function parseOut(text) {
   res.rotationFailed = /NO CONVERGENCE IN ROTATION ALGORITHM|PROBLEM OCCURRED IN THE ROTATION ALGORITHM/i.test(text);
   if (res.rotationFailed) res.warnings.push('The rotation algorithm did not converge — Mplus reports the unrotated solution and no fit statistics.');
 
-  // ---- title ---- (last non-empty line before SUMMARY OF ANALYSIS)
+  // ---- title ---- (the block of non-empty lines right before SUMMARY OF ANALYSIS; a TITLE longer than Mplus's
+  // 90-character input line is written on several lines by the generator and joined back here)
   const summaryIdx = findLine(lines, /^SUMMARY OF ANALYSIS\s*$/);
   if (summaryIdx > 0) {
-    for (let i = summaryIdx - 1; i >= 0; i--) { if (lines[i].trim()) { res.title = lines[i].trim(); break; } }
+    let i = summaryIdx - 1;
+    while (i >= 0 && !lines[i].trim()) i--;
+    const block = [];
+    while (i >= 0 && lines[i].trim()) { block.unshift(lines[i].trim()); i--; }
+    if (block.length) res.title = block.join(' ');
   }
   // Recognize app-generated longitudinal invariance outputs by their TITLE so the Results step can
   // group a dropped set into one sequential comparison table (these models are single-group, so
