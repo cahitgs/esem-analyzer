@@ -248,9 +248,10 @@ export function modIndexFor(parsed, step, id) {
   const names = tail.split('/').map(U);
   const hits = mi.entries.filter((e) => {
     if (step === 'metric') return e.kind === 'BY' && names.includes(U(e.b)) && (names.length > 1 || U(e.a) === U(head));
-    if (step === 'varcov') return names.length === 1 && String(id).includes('~')
-      ? e.kind === 'WITH' && ((U(e.a) === U(id.split('~')[0]) && U(e.b) === U(id.split('~')[1])) || (U(e.a) === U(id.split('~')[1]) && U(e.b) === U(id.split('~')[0])))
-      : e.kind === 'VAR' && names.includes(U(e.a));
+    if (step === 'varcov') return names.some((part) => { // a covariance pair across time: "F1~F2/F4~F5"
+      if (part.includes('~')) { const [x, y] = part.split('~'); return e.kind === 'WITH' && ((U(e.a) === x && U(e.b) === y) || (U(e.a) === y && U(e.b) === x)); }
+      return e.kind === 'VAR' && U(e.a) === part;
+    });
     if (step === 'strict') return e.kind === 'VAR' && names.includes(U(e.a));
     // intercepts, thresholds ("[ Z2$2 ]", or "[ PSI1_T1$ ]" when Mplus truncates the name) and latent means
     return e.kind === 'MEAN' && (names.includes(U(e.a)) || names.includes(U(e.a).replace(/\$.*$/, '')));

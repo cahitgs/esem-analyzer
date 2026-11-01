@@ -366,7 +366,7 @@ function stepPlan(spec, mode, mt, step, variant) {
   };
 }
 /** " [partial strong: Z2; without var-cov]" — the TITLE tag the parser reads back (ASCII; counts when long). */
-function branchTag(plan, maxLen = 44, pairName = (id) => id) {
+function branchTag(plan, maxLen = 160, pairName = (id) => id) {
   if (!plan.branch) return '';
   const names = (s) => [...plan.free[PARTIAL_KIND[s]]].map(pairName).join(', ');
   const parts = [...plan.partialSteps.map((s) => `partial ${INV_META[s].tag}: ${names(s)}`), ...plan.skipped.map((s) => `without ${INV_META[s].tag}`)];
@@ -606,7 +606,7 @@ function longPairName(spec) {
     return t2 ? `${pre}${item}/${t2}` : id;
   };
 }
-const longTag = (spec, f) => branchTag(f, 44, longPairName(spec));
+const longTag = (spec, f) => branchTag(f, 160, longPairName(spec));
 // Time-2 factor variances refixed @1 (freed ones stay *) and Time-2 means refixed @0 (freed ones stay free).
 function t2VarLines(k, free, gid = null, gFirst = false) {
   const t2r = longRanges(k).t2;
@@ -767,7 +767,11 @@ function buildLongCategorical(spec, mt, step, variant) {
   const lines = [...titleLine(`${LONG_TITLE[mt]} - ${stepLabel(step, { thresholds: true })}${longTag(spec, f)}`), ...headerBlocks(spec, header), 'MODEL:'];
   // measurement blocks — the same forms as the continuous builders
   if (mt === 'esem') {
-    lines.push(stmt([`${t1r} BY`, ...t1, flag('t1')]), stmt([`${t2r} BY`, ...t2, flag('t2')]));
+    // target rotation needs the target blocks here too (the plain EFA-set form leaves the configural model unidentified:
+    // "Fewer than 6 loadings have been given target values", standard errors not computed)
+    lines.push(...(spec.rotation.type === 'TARGET'
+      ? [...waveTargetBlocks(spec, t1, 1, flag('t1')), ...waveTargetBlocks(spec, t2, k + 1, flag('t2'))]
+      : [stmt([`${t1r} BY`, ...t1, flag('t1')]), stmt([`${t2r} BY`, ...t2, flag('t2')])]));
     if (f.varcov) lines.push(...t2VarLines(k, f.free.varcov), ...longCovLabels(k, f.free.varcov));
   } else if (mt === 'cfa') {
     spec.factors.forEach((fac, fi) => lines.push(...cfaWaveByLines(`F${fi + 1}`, mainItemsForFactor(spec, fac.id), `L${fi + 1}`, f.equate, freeLoadingPositions(spec, f.free.loadings, fac.id, mainItemsForFactor(spec, fac.id)))));

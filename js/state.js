@@ -148,12 +148,15 @@ export function partialCandidates(spec, mode, mt, step) {
     for (const f of spec.factors) for (const it of mainItemsForFactor(spec, f.id)) out.push({ id: `${f.id}:${it}`, label: `${fLabel(f.id)} → ${pair(it)}`, kind: 'loading', referent: false });
     return out;
   }
+  // across time the Time-2 factors are F(k+1)..F(2k) and G2 in the output, where the modification index of a variance,
+  // covariance or mean equality is printed — the pair the card looks up
+  const t2f = (id) => (time ? (id === 'G' ? 'G2' : `F${ids.length + Number(id.slice(1))}`) : null);
   if (kind === 'varcov') {
-    const out = all.map((id) => ({ id, label: `var(${fLabel(id)})`, kind: 'variance', referent: false }));
-    if (mt !== 'bcfa') for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) out.push({ id: `${all[i]}~${all[j]}`, label: `cov(${fLabel(all[i])}, ${fLabel(all[j])})`, kind: 'covariance', referent: false });
+    const out = all.map((id) => ({ id, label: `var(${fLabel(id)})`, kind: 'variance', referent: false, pair: t2f(id) }));
+    if (mt !== 'bcfa') for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) out.push({ id: `${all[i]}~${all[j]}`, label: `cov(${fLabel(all[i])}, ${fLabel(all[j])})`, kind: 'covariance', referent: false, pair: time ? `${t2f(all[i])}~${t2f(all[j])}` : null });
     return out;
   }
-  return all.map((id) => ({ id, label: `mean(${fLabel(id)})`, kind: 'mean', referent: false }));
+  return all.map((id) => ({ id, label: `mean(${fLabel(id)})`, kind: 'mean', referent: false, pair: t2f(id) }));
 }
 /** Set the parameters freed at one step of a chain (an empty list removes the step from the branch). */
 export function setPartial(spec, mode, mt, step, ids) {

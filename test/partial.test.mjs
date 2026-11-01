@@ -173,6 +173,29 @@ section('longitudinal chains: the pair freed at both waves (Morin T34), CFA load
   ok('full-chain files unchanged by the branch', requestedModels(spec).filter((m) => !m.variant && m.key.startsWith('linv:esem')).map((m) => m.file).join() === INV_SEQUENCE.map((s, i) => `LongInv_esem_${i + 1}_${s}.inp`).join());
 }
 
+section('sweep follow-ups (2 Nov): longitudinal ordinal ESEM target blocks, 999 indices, Time-2 factor pairs');
+{
+  const t1 = ['duy1_t1', 'duy2_t1', 'duy3_t1', 'duy4_t1', 'psi1_t1', 'psi2_t1', 'psi3_t1', 'psi4_t1', 'sos1_t1', 'sos2_t1', 'sos3_t1', 'sos4_t1'];
+  const t2 = t1.map((v) => v.replace('_t1', '_t2'));
+  const matrix = Array.from({ length: 10 }, (_, r) => [...t1.map(() => String((r % 5) + 1)), ...t2.map(() => String(((r + 1) % 5) + 1)), String(r < 5 ? 1 : 2)]);
+  const spec = createModelSpec({ fileName: 'iyiolus-ord.dat', mplusFile: 'iyiolus-ord.dat', delimiter: 'whitespace', hasHeader: false, nCols: 25, nRows: 800, varNames: [...t1, ...t2, 'okul'], categorical: [...t1, ...t2], missingCode: null, _matrix: matrix });
+  setItems(spec, t1); setFactorCount(spec, 3);
+  t1.forEach((it, i) => { spec.target[it] = { F1: i < 4, F2: i >= 4 && i < 8, F3: i >= 8 }; });
+  setOrdinal(spec, true);
+  spec.rotation = { type: 'TARGET', oblique: true, epsilon: null };
+  spec.modelTypes = { cfa: false, esem: true, bifactorCfa: false, bifactorEsem: true };
+  spec.longitudinal = { enabled: true, waveLabels: ['Time 1', 'Time 2'], waves: [t1, t2], correlatedUniqueness: true, invariance: { sequence: [...INV_SEQUENCE], partial: {}, skipped: {} } };
+  const conf = buildInp(spec, 'linv:esem:configural');
+  ok('longitudinal ordinal ESEM under target rotation writes the target blocks of each wave (the plain EFA-set form left the configural model unidentified in Mplus)', /F1 BY duy1_t1 duy2_t1 duy3_t1 duy4_t1 psi1_t1~0/.test(conf) && /F4 BY duy1_t2 duy2_t2 duy3_t2 duy4_t2 psi1_t2~0/.test(conf) && !/F1-F3 BY duy1_t1/.test(conf), conf.split('MODEL:')[1].slice(0, 160));
+  const geo = buildInp({ ...spec, rotation: { type: 'GEOMIN', oblique: true, epsilon: 0.5 } }, 'linv:esem:configural');
+  ok('under geomin the EFA-set form stays', /F1-F3 BY duy1_t1/.test(geo) && !/~0/.test(geo.split('MODEL:')[1]));
+  const mi = parseModIndices(['MODEL MODIFICATION INDICES', '', 'Minimum M.I. value for printing the modification index    10.000', '', 'BY Statements', '', 'F1       BY M3                 14.184     0.100      0.100      0.100', '', 'Means/Intercepts/Thresholds', '', '[ F1       ]                  999.000     0.000      0.000      0.000', '[ M3$3     ]                   25.485     0.200      0.200      0.200', '', 'Variances/Residual Variances', '', 'M4                            999.000     0.000      0.000      0.000', '']);
+  ok('parseModIndices skips the 999.000 placeholder of Mplus', mi.entries.length === 2 && mi.entries.map((e) => `${e.kind}:${e.a}`).join() === 'BY:F1,MEAN:M3$3', mi.entries);
+  const vc = partialCandidates(spec, 'time', 'cfa', 'varcov');
+  ok('across time a factor candidate names its Time-2 counterpart (F2 → F5, F1~F2 → F4~F5, G → G2)', vc.find((c) => c.id === 'F2').pair === 'F5' && vc.find((c) => c.id === 'F1~F2').pair === 'F4~F5' && partialCandidates(spec, 'time', 'bcfa', 'latentmean').find((c) => c.id === 'G').pair === 'G2' && partialCandidates(spec, 'groups', 'cfa', 'varcov').find((c) => c.id === 'F2').pair === null, vc.slice(0, 4));
+  ok('modIndexFor reads a covariance or variance pair across time', modIndexFor({ modIndices: { entries: [{ kind: 'WITH', a: 'F4', b: 'F5', mi: 12.5 }, { kind: 'VAR', a: 'F5', mi: 3 }] } }, 'varcov', 'F1~F2/F4~F5') === 12.5 && modIndexFor({ modIndices: { entries: [{ kind: 'VAR', a: 'G2', mi: 7.7 }] } }, 'varcov', 'G/G2') === 7.7 && modIndexFor({ modIndices: { entries: [{ kind: 'MEAN', a: 'G2', mi: 9.1 }] } }, 'latentmean', 'G/G2') === 9.1);
+}
+
 section('saved .json: the branch travels with the spec and is sanitised on restore');
 {
   const spec = data1Spec();

@@ -123,7 +123,8 @@ export function parseModIndices(lines) {
   const reMean = new RegExp(`^\\s*\\[\\s*(\\S+)\\s*\\]${tail}`);
   const reVar = new RegExp(`^\\s*(\\S+)${tail}`);
   const nums = (t) => t.trim().split(/\s+/).map(Number);
-  const push = (kind, a, b, v) => out.entries.push({ group, kind, a, b, mi: v[0], epc: v[1] ?? null, stdEpc: v[2] ?? null, stdyxEpc: v[3] ?? null });
+  // "999.000  0.000  0.000  0.000" is Mplus's "not computed" placeholder, not an index (a real index can exceed 999)
+  const push = (kind, a, b, v) => { if (v[0] === 999 && !(v[1] ?? 0)) return; out.entries.push({ group, kind, a, b, mi: v[0], epc: v[1] ?? null, stdEpc: v[2] ?? null, stdyxEpc: v[3] ?? null }); };
   for (let i = start + 1; i < lines.length; i++) {
     const L = lines[i];
     if (/^(TECHNICAL|RESIDUAL OUTPUT|CONFIDENCE INTERVALS|STANDARDIZED|MODEL COMMAND|CFA MODEL COMMAND|SAVEDATA|DIAGRAM|SAMPLE STATISTICS|Beginning Time|MUTHEN & MUTHEN)/.test(L)) break;
