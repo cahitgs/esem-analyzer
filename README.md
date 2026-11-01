@@ -136,7 +136,7 @@ node test/catinv.test.mjs       # categorical WLSMV invariance + DIFFTEST, ESEM 
 node test/invorder.test.mjs     # invariance step order, unestimated outputs (MG + longitudinal), total-sample models, ID columns, Time-2 pairing incl. an 18 000-file name sweep, Mplus input errors, invariance tables without a verdict column (142)
 node test/examples.test.mjs     # the article’s two example data sets: presets regenerate the article’s 56 inputs byte for byte (20)
 node test/mplus91.test.mjs      # Mplus 9.1.1 outputs parse like the 8.3 outputs of the same inputs (side-by-side section, DIFFTEST, no-χ² wording) (34)
-node test/partial.test.mjs      # partial invariance: the branch (Morin's T11/T34 forms), skipped steps, DIFFTEST handshake, title tag + modification indices, tables/notes/prose/Word, real Mplus 9.1.1 runs reproducing Table 27.1 (101)
+node test/partial.test.mjs      # partial invariance: the branch (Morin's T11/T34 forms), skipped steps, DIFFTEST handshake, title tag + modification indices, tables/notes/prose/Word, real Mplus 9.1.1 runs reproducing Table 27.1, a long TITLE wrapped at Mplus's 90-character line (105)
 ```
 
 The two multi-group invariance engines were additionally **cross-validated against De Beer & Morin's
