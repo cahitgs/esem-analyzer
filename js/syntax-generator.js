@@ -288,87 +288,230 @@ function buildBifactorEsem(spec) {
   return lines.join('\n') + '\n';
 }
 
-// ---------- Multi-group measurement invariance (ESEM) ----------
+// ---------- Measurement invariance: steps, labels and the partial-invariance branch ----------
 export const INV_SEQUENCE = ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'];
+// Morin's names — weak, strong — on the chips, in the titles and in the tables; `thresholds` is the strong step's
+// label for the ordinal chains; `tag` is the ASCII word used inside a title's branch tag.
 export const INV_META = {
-  configural: { label: 'Configural', short: 'configural' },
-  metric: { label: 'Metric (loadings)', short: 'weak (metric)' },
-  scalar: { label: 'Scalar (intercepts)', short: 'strong (scalar)' },
-  strict: { label: 'Strict (residuals)', short: 'strict' },
-  varcov: { label: 'Factor var/cov', short: 'variance–covariance' },
-  latentmean: { label: 'Latent means', short: 'latent mean' },
+  configural: { label: 'Configural', short: 'configural', tag: 'configural' },
+  metric: { label: 'Weak (loadings)', short: 'weak', tag: 'weak' },
+  scalar: { label: 'Strong (intercepts)', short: 'strong', tag: 'strong', thresholds: 'Strong (thresholds)' },
+  strict: { label: 'Strict (residuals)', short: 'strict', tag: 'strict' },
+  varcov: { label: 'Factor var/cov', short: 'variance–covariance', tag: 'var-cov' },
+  latentmean: { label: 'Latent means', short: 'latent mean', tag: 'latent means' },
 };
+export function stepLabel(step, { thresholds = false } = {}) { return (thresholds && INV_META[step].thresholds) || INV_META[step].label; }
 
-// Measurement invariance following Morin et al. (2023): explicit per-group sections, the
-// ESEM block in the user's rotation, factor variances fixed to 1 (freed in non-reference
-// groups from weak onward), factor means fixed to 0 (freed from strong onward, refixed for
-// the latent-mean test), and alphanumeric equality labels (i# intercepts, u# uniquenesses,
-// cov# covariances). Loadings are invariant by default from weak onward (BY omitted in groups).
-function buildInvariance(spec, step) {
-  if (isCategoricalInvariance(spec)) return buildInvarianceCategorical(spec, step);
-  const items = spec.items, N = items.length, ids = factorIds(spec);
-  const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
-  const by = esemByBlocks(spec, '(*1)');
-  const brackets = (label) => stmt([`[${items[0]}`, ...items.slice(1, -1), `${items[N - 1]}]${label ? ' ' + label : ''}`]);
-  const intFree = brackets('');                       // unlabelled bracket may wrap (Mplus reads all vars)
-  const intInv = chunkLabeled(items, 'i', true);      // labelled → one line per chunk (see chunkLabeled)
-  const uniqFree = stmt(items);
-  const uniqInv = chunkLabeled(items, 'u', false);
-  const varFix = `${range}@1;`, meanFix = `[${range}@0];`;
-  const varFree = wrapList(spec.factors.map((f) => `${f.id}*;`));
-  const meanFree = wrapList(spec.factors.map((f) => `[${f.id}*];`));
-  const covLabels = [];
-  let c = 1;
-  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) covLabels.push(`${ids[i]} WITH ${ids[j]} (cov${c++});`);
-
-  let main, grp;
-  switch (step) {
-    case 'configural': main = [...by, varFix, meanFix, intFree, uniqFree]; grp = [...by, varFix, meanFix, intFree, uniqFree]; break;
-    case 'metric':     main = [...by, varFix, meanFix, intFree, uniqFree]; grp = [varFree, meanFix, intFree, uniqFree]; break;
-    case 'scalar':     main = [...by, varFix, meanFix, intInv, uniqFree];  grp = [varFree, meanFree, intInv, uniqFree]; break;
-    case 'strict':     main = [...by, varFix, meanFix, intInv, uniqInv];   grp = [varFree, meanFree, intInv, uniqInv]; break;
-    case 'varcov':     main = [...by, varFix, ...covLabels, meanFix, intInv, uniqInv]; grp = [varFix, ...covLabels, meanFree, intInv, uniqInv]; break;
-    case 'latentmean': main = [...by, varFix, ...covLabels, meanFix, intInv, uniqInv]; grp = [varFix, ...covLabels, meanFix, intInv, uniqInv]; break;
-    default: throw new Error(`Unknown invariance step: ${step}`);
-  }
-
-  // ESEM measurement invariance is iteration-heavy (rotation re-estimated under cross-group
-  // constraints); raise the optimizer cap so complex models (many factors/items) still converge.
-  const lines = [...titleLine(`MG invariance - ${INV_META[step].label}`), ...headerBlocks(spec, { rotation: true, iterations: 10000, grouping: true }), 'MODEL:', ...main];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
-  lines.push(...outputBlock(spec));
-  return lines.join('\n') + '\n';
+// Partial invariance (Byrne et al., 1989; Morin, 2023). When a step goes beyond the fit-change guideline, the
+// researcher frees the parameters responsible — the largest modification indices, one at a time — and continues
+// the sequence from that partial model, which is compared with the last retained model; a step that has no partial
+// form (the rotated loadings, variances, covariances and means of an ESEM set cannot be freed one by one) can be
+// skipped, its constraints left out of the later steps, which are then compared with the last retained model
+// (Morin's rule for the application). The branch of a chain lives in spec.groups.invariance or
+// spec.longitudinal.invariance as
+//   partial: { [modelType]: { [step]: [ids] } }     skipped: { [modelType]: [steps] }
+// where an id names an item (its intercept, thresholds or residual variance), 'F1:X3' a loading (CFA families),
+// 'F1~F2' a factor covariance, 'F2' a factor variance (var–cov step) or a factor mean (latent-means step).
+// Branch models carry the variant 'p' (key "inv:scalar@p", file "Inv_3p_scalar.inp", DIFFTEST file
+// "Inv_diff_scalarp.dat"); the full chain ignores the branch.
+export const PARTIAL_KIND = { metric: 'loadings', scalar: 'intercepts', strict: 'residuals', varcov: 'varcov', latentmean: 'means' };
+export const SKIPPABLE_STEPS = ['strict', 'varcov'];
+/** What a step may free for a model family: CFA and bifactor-CFA at every step after configural; ESEM and
+ *  bifactor-ESEM at the strong and strict steps only (null = no partial form at that step). */
+export function partialKind(mt, step) {
+  const cfaFamily = mt === 'cfa' || mt === 'bcfa';
+  if (step === 'scalar' || step === 'strict') return PARTIAL_KIND[step];
+  return cfaFamily && PARTIAL_KIND[step] ? PARTIAL_KIND[step] : null;
+}
+export const invHolder = (spec, mode) => (mode === 'time' ? spec.longitudinal?.invariance : spec.groups?.invariance);
+/** The branch of one chain: { partial: { step: [ids] }, skipped: [steps], active }. */
+export function invBranch(spec, mode, mt) {
+  const h = invHolder(spec, mode) || {};
+  const partial = {};
+  for (const [s, ids] of Object.entries(h.partial?.[mt] || {})) if (Array.isArray(ids) && ids.length && partialKind(mt, s)) partial[s] = ids.slice();
+  const skipped = (h.skipped?.[mt] || []).filter((s) => SKIPPABLE_STEPS.includes(s));
+  return { partial, skipped, active: Object.keys(partial).length > 0 || skipped.length > 0 };
+}
+const stepIdx = (s) => INV_SEQUENCE.indexOf(s);
+/** The first step the branch changes (a partial step, or the step after a skipped one); Infinity without a branch. */
+export function branchStart(br) {
+  const starts = [...Object.keys(br.partial).map(stepIdx), ...br.skipped.map((s) => stepIdx(s) + 1)];
+  return starts.length ? Math.min(...starts) : Infinity;
+}
+/** The constraints in force at `step` — cumulative by step order whatever the selected sequence — with the branch's
+ *  releases and skipped steps applied for variant 'p'. */
+function stepPlan(spec, mode, mt, step, variant) {
+  const br = variant === 'p' ? invBranch(spec, mode, mt) : { partial: {}, skipped: [] };
+  const pos = stepIdx(step);
+  const has = (s) => stepIdx(s) <= pos && !br.skipped.includes(s);
+  const free = (s) => new Set(stepIdx(s) <= pos ? (br.partial[s] || []) : []);
+  return {
+    configural: step === 'configural',
+    loadings: has('metric'), intercepts: has('scalar'), residuals: has('strict'), varcov: has('varcov'), means: has('latentmean'),
+    free: { loadings: free('metric'), intercepts: free('scalar'), residuals: free('strict'), varcov: free('varcov'), means: free('latentmean') },
+    partialSteps: INV_SEQUENCE.filter((s) => stepIdx(s) <= pos && br.partial[s]?.length),
+    skipped: br.skipped.filter((s) => stepIdx(s) < pos),
+    branch: variant === 'p',
+  };
+}
+/** " [partial strong: Z2; without var-cov]" — the TITLE tag the parser reads back (ASCII; counts when long). */
+function branchTag(plan, maxLen = 44) {
+  if (!plan.branch) return '';
+  const names = (s) => [...plan.free[PARTIAL_KIND[s]]].join(', ');
+  const parts = [...plan.partialSteps.map((s) => `partial ${INV_META[s].tag}: ${names(s)}`), ...plan.skipped.map((s) => `without ${INV_META[s].tag}`)];
+  if (!parts.length) return '';
+  let tag = parts.join('; ');
+  if (tag.length > maxLen) tag = [...plan.partialSteps.map((s) => `partial ${INV_META[s].tag}: ${plan.free[PARTIAL_KIND[s]].size} freed`), ...plan.skipped.map((s) => `without ${INV_META[s].tag}`)].join('; ');
+  return ` [${tag}]`;
 }
 
-// ---------- Multi-group measurement invariance (categorical items, WLSMV/THETA) ----------
-// With ordered-categorical indicators the invariance chain constrains THRESHOLDS, not intercepts,
-// and follows Millsap & Yun-Tein's identification (as implemented in De Beer & Morin's (B)ESEM
-// syntax generator, statstools.app/b_esem, whose categorical output this mirrors):
-//  - configural already equates the FIRST threshold of every item plus the SECOND threshold of one
-//    referent item per factor across groups; the remaining thresholds are freed by listing them
-//    (unlabelled) in the group-specific sections — in Mplus MG models thresholds are equal across
-//    groups BY DEFAULT, so those group-section mentions are what makes the model configural.
-//  - latent means are therefore identified (and freed) in non-reference groups from configural on;
-//  - THETA parameterization: uniquenesses fixed to 1 in group 1, free in the others until the
-//    strict step refixes them to 1 everywhere;
-//  - WLSMV χ² values cannot be differenced directly — each step saves derivatives via
-//    SAVEDATA: DIFFTEST=... and the next selected step reads them via ANALYSIS: DIFFTEST=...,
-//    which makes Mplus print the "Chi-Square Test for Difference Testing" block in its .out.
+/** Equality-labelled statements with position-based labels, split into one-line chunks (Mplus ties a trailing
+ *  "(labels)" to the last physical line only — see chunkLabeled), the positions in `freeIdx` written as free
+ *  parameters between the labelled runs, Morin's partial-invariance form (T11, T34: "[Z1] (i9); [Z2*]; [Z3 Z4]
+ *  (i11-i12);"). Without free positions this is chunkLabeled. */
+function labeledExcept(items, prefix, bracket, freeIdx = new Set()) {
+  const open = bracket ? '[' : '', close = bracket ? ']' : '';
+  const make = (i, end) => `${open}${items.slice(i, end + 1).join(' ')}${close} (${prefix}${i + 1}${end > i ? `-${prefix}${end + 1}` : ''});`;
+  const lines = [];
+  let i = 0;
+  while (i < items.length) {
+    if (freeIdx.has(i)) { lines.push(bracket ? `[${items[i]}*];` : `${items[i]};`); i++; continue; }
+    let j = i;
+    while (j + 1 < items.length && !freeIdx.has(j + 1) && make(i, j + 1).length <= WRAP) j++;
+    lines.push(make(i, j));
+    i = j + 1;
+  }
+  return lines.join('\n');
+}
+const positionsOf = (items, ids) => new Set([...ids].map((id) => items.indexOf(id)).filter((i) => i >= 0));
+
+function diffTestName(step, prefix = 'Inv', suffix = '') { return `${prefix}_diff_${step}${suffix}.dat`; }
+/** DIFFTEST handshake between the ADJACENT selected steps of a WLSMV chain: a model reads the derivatives of the
+ *  previous retained step (skipped steps are passed over; a branch model reads the full chain's file until the
+ *  branch starts, then the branch's own "…p.dat" files) and saves its own for the next one. */
+function diffTestLinks(spec, mode, mt, step, variant, seq, prefix) {
+  const none = { difftestIn: null, difftestOut: null };
+  if (!/MV$/i.test(spec.estimator || '')) return none;
+  const br = variant === 'p' ? invBranch(spec, mode, mt) : { partial: {}, skipped: [] };
+  const start = variant === 'p' ? branchStart(br) : Infinity;
+  const pos = seq.indexOf(step);
+  if (pos < 0) return none;
+  let prev = null, next = null;
+  for (let i = pos - 1; i >= 0; i--) if (!br.skipped.includes(seq[i])) { prev = seq[i]; break; }
+  for (let i = pos + 1; i < seq.length; i++) if (!br.skipped.includes(seq[i])) { next = seq[i]; break; }
+  const suffix = (s) => (variant === 'p' && stepIdx(s) >= start ? 'p' : '');
+  return { difftestIn: prev ? diffTestName(prev, prefix, suffix(prev)) : null, difftestOut: next ? diffTestName(step, prefix, suffix(step)) : null };
+}
+
+// ---------- Multi-group measurement invariance (CFA, ESEM, bifactor-CFA, bifactor-ESEM) ----------
+// Measurement invariance following Morin (2023): explicit per-group sections, the measurement block in the
+// user's rotation (ESEM: the user's rotation; bifactor-ESEM: one orthogonal-target set with a G factor on every
+// item plus per-factor target blocks; CFA families: one BY line per factor with the first loading freed and the
+// factor variances fixed to 1, the bifactor-CFA factors orthogonal), factor variances fixed to 1 (freed in the
+// non-reference groups from weak onward), factor means fixed to 0 (freed from strong onward, refixed for the
+// latent-mean test), and alphanumeric equality labels (i# intercepts, u# uniquenesses, cov# covariances).
+// Loadings are invariant by default from weak onward (BY omitted in the group sections). The bifactor-ESEM
+// chain was cross-validated against De Beer & Morin's (B)ESEM generator (statstools.app/b_esem): identical
+// npar/df/χ² at every step on real Mplus runs; its var–cov step must refix the non-reference group's variances
+// AND equate ALL factor covariances (G pairs included) — Mplus rejects a variances-only refix for an EFA set.
+// Bifactor-CFA has no factor covariances, so its var–cov step equates the variances only. Each chain has its own
+// file prefix and DIFFTEST files, so four chains can share one folder.
+const MG_CHAIN = {
+  esem: { prefix: 'inv', filePrefix: 'Inv', name: 'ESEM', title: (cat) => (cat ? 'MG invariance (categorical)' : 'MG invariance'), header: { rotation: true, iterations: 10000 } },
+  besem: { prefix: 'binv', filePrefix: 'BifactorInv', name: 'Bifactor-ESEM', title: () => 'MG invariance (bifactor-ESEM)', header: { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', iterations: 100000 } },
+  cfa: { prefix: 'cinv', filePrefix: 'CfaInv', name: 'CFA', title: () => 'MG invariance (CFA)', header: { rotation: false } },
+  bcfa: { prefix: 'bcinv', filePrefix: 'BifactorCfaInv', name: 'Bifactor-CFA', title: () => 'MG invariance (bifactor-CFA)', header: { rotation: false, iterations: 10000 } },
+};
+const MG_BY_KEY = { inv: 'esem', binv: 'besem', cinv: 'cfa', bcinv: 'bcfa' };
+
 function isCategoricalInvariance(spec) {
   const cat = spec.data?.categorical || [];
   return spec.items.length > 0 && spec.items.every((it) => cat.includes(it));
 }
 
-/** Threshold statements with GLOBAL running labels (item k's j-th threshold → t<cumulative#>),
- *  packed several per line. mode 'partial' labels only $1 of every item + $2 of the referent items
- *  (`refs` from thresholdReferents in state.js: one per factor, plus the G referent for the bifactor
- *  chain — each with ≥ 2 thresholds) — the configural/metric identification; 'all' labels every one. */
-function thresholdLines(spec, mode, counts, refs, items = spec.items) {
+/** The measurement block and the factor-level statements of one multi-group family. */
+function mgPieces(spec, mt) {
+  const ids = factorIds(spec), items = spec.items;
+  const bifactor = mt === 'besem' || mt === 'bcfa';
+  const all = bifactor ? ['G', ...ids] : ids;
+  const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
+  let by;
+  if (mt === 'esem') by = esemByBlocks(spec, '(*1)');
+  else if (mt === 'besem') by = [stmt(['G BY', ...items, '(*1)']), ...spec.factors.map((f) => stmt([`${f.id} BY`, ...items.map((it) => (spec.target[it]?.[f.id] ? it : `${it}~0`)), '(*1)']))];
+  else {
+    by = [];
+    if (bifactor) by.push(cfaByLine('G', items));
+    for (const f of spec.factors) by.push(cfaByLine(f.id, mainItemsForFactor(spec, f.id)));
+    if (bifactor) by.push(...orthogonalityLines(all));
+  }
+  const covPairs = [];
+  if (mt !== 'bcfa') for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) covPairs.push([all[i], all[j]]);
+  const varFix = bifactor ? `G@1; ${range}@1;` : `${range}@1;`;
+  const meanFix = bifactor ? `[G@0]; [${range}@0];` : `[${range}@0];`;
+  return {
+    items, bifactor, by, varFix, meanFix,
+    varFree: wrapList(all.map((id) => `${id}*;`)),
+    meanFree: wrapList(all.map((id) => `[${id}*];`)),
+    // var–cov step: every covariance equated by label; a freed pair (partial var–cov, CFA) stays unlabelled
+    covLabels: (free) => covPairs.map(([a, b], i) => (free.has(`${a}~${b}`) ? `${a} WITH ${b};` : `${a} WITH ${b} (cov${i + 1});`)),
+    // group-section variances / means with some factors freed (partial var–cov / latent means, CFA families)
+    varFixExcept: (free) => (free.size ? wrapList(all.map((id) => (free.has(id) ? `${id}*;` : `${id}@1;`))) : varFix),
+    meanFixExcept: (free) => (free.size ? wrapList(all.map((id) => (free.has(id) ? `[${id}*];` : `[${id}@0];`))) : meanFix),
+    // CFA families: a loading freed in the non-reference groups ("F1 BY X3*;" in their sections; "*" so that a
+    // first indicator is not refixed to 1 by Mplus's BY default)
+    freeLoadingLines: (free) => [...free].map((id) => { const [f, it] = id.split(':'); return `${f} BY ${it}*;`; }),
+  };
+}
+
+function buildMgContinuous(spec, mt, step, variant) {
+  const P = mgPieces(spec, mt), plan = stepPlan(spec, 'groups', mt, step, variant);
+  const { items } = P;
+  const intFree = stmt([`[${items[0]}`, ...items.slice(1, -1), `${items[items.length - 1]}]`]);
+  const intInv = labeledExcept(items, 'i', true, positionsOf(items, plan.free.intercepts));
+  const uniqFree = stmt(items);
+  const uniqInv = labeledExcept(items, 'u', false, positionsOf(items, plan.free.residuals));
+  const cov = plan.varcov ? P.covLabels(plan.free.varcov) : [];
+  const main = [...P.by, P.varFix, ...cov, P.meanFix, plan.intercepts ? intInv : intFree, plan.residuals ? uniqInv : uniqFree];
+  const grp = [
+    ...(plan.configural ? P.by : P.freeLoadingLines(plan.free.loadings)),
+    plan.configural || plan.varcov ? P.varFixExcept(plan.free.varcov) : P.varFree,
+    ...cov,
+    plan.intercepts && !plan.means ? P.meanFree : P.meanFixExcept(plan.means ? plan.free.means : new Set()),
+    plan.intercepts ? intInv : intFree,
+    plan.residuals ? uniqInv : uniqFree,
+  ];
+  const C = MG_CHAIN[mt];
+  const lines = [...titleLine(`${C.title(false)} - ${stepLabel(step)}${branchTag(plan)}`), ...headerBlocks(spec, { ...C.header, grouping: true }), 'MODEL:', ...main];
+  for (const code of spec.groups.codes.slice(1)) lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp);
+  lines.push(...outputBlock(spec));
+  return lines.join('\n') + '\n';
+}
+
+// ---------- Multi-group measurement invariance with ordinal items (WLSMV / THETA / DIFFTEST) ----------
+// The chains constrain THRESHOLDS, not intercepts, and follow Millsap & Yun-Tein's identification as Morin
+// (Hoyle ch. 27 supplement, T15–T27 and T42–T59) and De Beer & Morin's generator implement it:
+//  - configural already equates the FIRST threshold of every item plus the SECOND threshold of one referent
+//    item per factor (and one more for the G factor of the bifactor chains) across groups; the remaining
+//    thresholds are freed by listing them (unlabelled) in the group-specific sections — in Mplus MG models
+//    thresholds are equal across groups BY DEFAULT, so those mentions are what makes the model configural;
+//  - latent means are therefore identified (and freed) in the non-reference groups from configural on;
+//  - THETA parameterization: uniquenesses fixed to 1 in group 1, free in the others until the strict step
+//    refixes them to 1 everywhere;
+//  - a partial strong model keeps the configural (first-threshold) treatment for the freed items;
+//  - WLSMV χ² values cannot be differenced directly — each step saves derivatives via SAVEDATA: DIFFTEST=…
+//    and the next selected step reads them via ANALYSIS: DIFFTEST=…, which makes Mplus print the
+//    "Chi-Square Test for Difference Testing" block in its .out.
+/** Threshold statements with GLOBAL running labels (item k's j-th threshold → t<cumulative#>), packed several
+ *  per line. mode 'partial' labels only $1 of every item + $2 of the referent items (`refs` from
+ *  thresholdReferents in state.js) — the configural/weak identification; 'all' labels every threshold, except
+ *  those of the items in `free` (partial strong invariance), which keep the configural treatment. */
+function thresholdLines(spec, mode, counts, refs, items = spec.items, free = new Set()) {
   const parts = [];
   let t = 1;
   for (const it of items) {
+    const allHere = mode === 'all' && !free.has(it);
     for (let j = 1; j <= counts[it]; j++) {
-      const labelled = mode === 'all' || j === 1 || (j === 2 && refs.has(it));
+      const labelled = allHere || j === 1 || (j === 2 && refs.has(it));
       parts.push(labelled ? `[${it}$${j}] (t${t});` : `[${it}$${j}];`);
       t++;
     }
@@ -376,303 +519,94 @@ function thresholdLines(spec, mode, counts, refs, items = spec.items) {
   return wrapList(parts);
 }
 
-function diffTestName(step, prefix = 'Inv') { return `${prefix}_diff_${step}.dat`; }
-
-function buildInvarianceCategorical(spec, step) {
-  const items = spec.items, ids = factorIds(spec);
-  const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
-  const by = esemByBlocks(spec, '(*1)');
+function buildMgCategorical(spec, mt, step, variant) {
+  const P = mgPieces(spec, mt), plan = stepPlan(spec, 'groups', mt, step, variant);
+  const { items, bifactor } = P;
   const counts = thresholdCounts(spec);
-  const { refs } = thresholdReferents(spec, counts);           // one eligible (≥ 3 categories) referent per factor
-  const thrPartial = thresholdLines(spec, 'partial', counts, refs);
-  const thrAll = thresholdLines(spec, 'all', counts, refs);
+  const { refs } = thresholdReferents(spec, counts, { general: bifactor }); // one referent per factor (+ one for G), ≥ 3 categories each
+  const thr = plan.intercepts ? thresholdLines(spec, 'all', counts, refs, items, plan.free.intercepts) : thresholdLines(spec, 'partial', counts, refs);
   const uniqFix = wrapList(items.map((it) => `${it}@1;`));
   const uniqFree = wrapList(items.map((it) => `${it}*;`));
-  const varFix = `${range}@1;`, meanFix = `[${range}@0];`;
-  const varFree = wrapList(spec.factors.map((f) => `${f.id}*;`));
-  const meanFree = wrapList(spec.factors.map((f) => `[${f.id}*];`));
-  const covLabels = [];
-  let c = 1;
-  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) covLabels.push(`${ids[i]} WITH ${ids[j]} (cov${c++});`);
-
-  let main, grp;
-  switch (step) {
-    case 'configural': main = [...by, varFix, meanFix, thrPartial, uniqFix]; grp = [...by, varFix, meanFree, thrPartial, uniqFree]; break;
-    case 'metric':     main = [...by, varFix, meanFix, thrPartial, uniqFix]; grp = [varFree, meanFree, thrPartial, uniqFree]; break;
-    case 'scalar':     main = [...by, varFix, meanFix, thrAll, uniqFix];     grp = [varFree, meanFree, thrAll, uniqFree]; break;
-    case 'strict':     main = [...by, varFix, meanFix, thrAll, uniqFix];     grp = [varFree, meanFree, thrAll, uniqFix]; break;
-    case 'varcov':     main = [...by, varFix, ...covLabels, meanFix, thrAll, uniqFix]; grp = [varFix, ...covLabels, meanFree, thrAll, uniqFix]; break;
-    case 'latentmean': main = [...by, varFix, ...covLabels, meanFix, thrAll, uniqFix]; grp = [varFix, ...covLabels, meanFix, thrAll, uniqFix]; break;
-    default: throw new Error(`Unknown invariance step: ${step}`);
-  }
-
-  // DIFFTEST chains ADJACENT SELECTED steps: read the previous step's derivatives, save ours for
-  // the next. Only meaningful for the *MV estimators (WLSMV/ULSMV/MLMV) that need it.
-  const seq = spec.groups.invariance?.sequence || INV_SEQUENCE;
-  const pos = seq.indexOf(step);
-  const chained = /MV$/i.test(spec.estimator || '');
-  const difftestIn = chained && pos > 0 ? diffTestName(seq[pos - 1]) : null;
-  const difftestOut = chained && pos >= 0 && pos < seq.length - 1 ? diffTestName(step) : null;
-
-  const lines = [
-    ...titleLine(`MG invariance (categorical) - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotation: true, parameterization: 'THETA', difftestIn, grouping: true }),
-    'MODEL:', ...main,
+  const uniqGrp = !plan.residuals ? uniqFree : plan.free.residuals.size ? wrapList(items.map((it) => (plan.free.residuals.has(it) ? `${it}*;` : `${it}@1;`))) : uniqFix;
+  const cov = plan.varcov ? P.covLabels(plan.free.varcov) : [];
+  const main = [...P.by, P.varFix, ...cov, P.meanFix, thr, uniqFix];
+  const grp = [
+    ...(plan.configural ? P.by : P.freeLoadingLines(plan.free.loadings)),
+    plan.configural || plan.varcov ? P.varFixExcept(plan.free.varcov) : P.varFree,
+    ...cov,
+    plan.means ? P.meanFixExcept(plan.free.means) : P.meanFree,
+    thr, uniqGrp,
   ];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
+  const C = MG_CHAIN[mt];
+  const header = { ...C.header, parameterization: 'THETA', grouping: true };
+  if (mt === 'esem') delete header.iterations;
+  const seq = spec.groups.invariance?.sequence || INV_SEQUENCE;
+  const { difftestIn, difftestOut } = diffTestLinks(spec, 'groups', mt, step, variant, seq, C.filePrefix);
+  const lines = [...titleLine(`${C.title(true)} - ${stepLabel(step, { thresholds: true })}${branchTag(plan)}`), ...headerBlocks(spec, { ...header, difftestIn }), 'MODEL:', ...main];
+  for (const code of spec.groups.codes.slice(1)) lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp);
   lines.push(...outputBlock(spec));
   if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
   return lines.join('\n') + '\n';
 }
 
-// ---------- Multi-group measurement invariance (bifactor-ESEM) ----------
-// Same 6-step mechanics as buildInvariance, but on the bifactor measurement model: one G factor
-// loading every item plus per-factor orthogonal-TARGET blocks, all in one ESEM set (Morin).
-// Cross-validated against De Beer & Morin's (B)ESEM generator (statstools.app/b_esem): identical
-// npar/df/χ² at every step on real Mplus runs. The var-cov step must refix the non-reference
-// group's variances AND equate ALL factor covariances (G pairs included) — Mplus rejects a
-// variances-only refix for an EFA set.
-function buildInvarianceBifactorEsem(spec, step) {
-  if (isCategoricalInvariance(spec)) return buildInvarianceBifactorEsemCategorical(spec, step);
-  const items = spec.items, N = items.length, ids = factorIds(spec);
-  const all = ['G', ...ids];
-  const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
-  const by = [
-    stmt(['G BY', ...items, '(*1)']),
-    ...spec.factors.map((f) => stmt([`${f.id} BY`, ...items.map((it) => (spec.target[it]?.[f.id] ? it : `${it}~0`)), '(*1)'])),
-  ];
-  const brackets = () => stmt([`[${items[0]}`, ...items.slice(1, -1), `${items[N - 1]}]`]);
-  const intFree = brackets();
-  const intInv = chunkLabeled(items, 'i', true);
-  const uniqFree = stmt(items);
-  const uniqInv = chunkLabeled(items, 'u', false);
-  const varFix = `G@1; ${range}@1;`, meanFix = `[G@0]; [${range}@0];`;
-  const varFree = wrapList(all.map((id) => `${id}*;`));
-  const meanFree = wrapList(all.map((id) => `[${id}*];`));
-  const covLabels = [];
-  let c = 1;
-  for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) covLabels.push(`${all[i]} WITH ${all[j]} (cov${c++});`);
-
-  let main, grp;
-  switch (step) {
-    case 'configural': main = [...by, varFix, meanFix, intFree, uniqFree]; grp = [...by, varFix, meanFix, intFree, uniqFree]; break;
-    case 'metric':     main = [...by, varFix, meanFix, intFree, uniqFree]; grp = [varFree, meanFix, intFree, uniqFree]; break;
-    case 'scalar':     main = [...by, varFix, meanFix, intInv, uniqFree];  grp = [varFree, meanFree, intInv, uniqFree]; break;
-    case 'strict':     main = [...by, varFix, meanFix, intInv, uniqInv];   grp = [varFree, meanFree, intInv, uniqInv]; break;
-    case 'varcov':     main = [...by, varFix, ...covLabels, meanFix, intInv, uniqInv]; grp = [varFix, ...covLabels, meanFree, intInv, uniqInv]; break;
-    case 'latentmean': main = [...by, varFix, ...covLabels, meanFix, intInv, uniqInv]; grp = [varFix, ...covLabels, meanFix, intInv, uniqInv]; break;
-    default: throw new Error(`Unknown invariance step: ${step}`);
-  }
-
-  // 100000 iterations, as in the longitudinal bifactor-ESEM builder: orthogonal-target bifactor
-  // invariance is the most iteration-hungry model family the app generates (Morin's own setting).
-  const lines = [
-    ...titleLine(`MG invariance (bifactor-ESEM) - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', iterations: 100000, grouping: true }),
-    'MODEL:', ...main,
-  ];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
-  lines.push(...outputBlock(spec));
-  return lines.join('\n') + '\n';
-}
-
-// ---------- Multi-group measurement invariance (bifactor-ESEM, categorical items, WLSMV/THETA) ----------
-// Morin's thresholds rule for bifactor models (Hoyle ch. 27 supplement, T15 & T42): besides the first
-// threshold of every item and the second threshold of one referent indicator per specific factor, ONE
-// MORE item's second threshold — a referent for the G factor — is equated across groups from configural
-// on (Morin takes the next item in the list, X2; referents need ≥ 3 categories — see thresholdReferents).
-// Everything else follows buildInvarianceCategorical on the
-// bifactor measurement block of buildInvarianceBifactorEsem. Derivatives go to BifactorInv_diff_<step>.dat
-// so this chain never collides with the first-order chain's Inv_diff_*.dat files in the same folder.
-function buildInvarianceBifactorEsemCategorical(spec, step) {
-  const items = spec.items, ids = factorIds(spec);
-  const all = ['G', ...ids];
-  const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
-  const by = [
-    stmt(['G BY', ...items, '(*1)']),
-    ...spec.factors.map((f) => stmt([`${f.id} BY`, ...items.map((it) => (spec.target[it]?.[f.id] ? it : `${it}~0`)), '(*1)'])),
-  ];
-  const counts = thresholdCounts(spec);
-  const { refs } = thresholdReferents(spec, counts, { general: true }); // S referents + the G referent (≥ 3 categories each)
-  const thrPartial = thresholdLines(spec, 'partial', counts, refs);
-  const thrAll = thresholdLines(spec, 'all', counts, refs);
-  const uniqFix = wrapList(items.map((it) => `${it}@1;`));
-  const uniqFree = wrapList(items.map((it) => `${it}*;`));
-  const varFix = `G@1; ${range}@1;`, meanFix = `[G@0]; [${range}@0];`;
-  const varFree = wrapList(all.map((id) => `${id}*;`));
-  const meanFree = wrapList(all.map((id) => `[${id}*];`));
-  const covLabels = [];
-  let c = 1;
-  for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) covLabels.push(`${all[i]} WITH ${all[j]} (cov${c++});`);
-
-  let main, grp;
-  switch (step) {
-    case 'configural': main = [...by, varFix, meanFix, thrPartial, uniqFix]; grp = [...by, varFix, meanFree, thrPartial, uniqFree]; break;
-    case 'metric':     main = [...by, varFix, meanFix, thrPartial, uniqFix]; grp = [varFree, meanFree, thrPartial, uniqFree]; break;
-    case 'scalar':     main = [...by, varFix, meanFix, thrAll, uniqFix];     grp = [varFree, meanFree, thrAll, uniqFree]; break;
-    case 'strict':     main = [...by, varFix, meanFix, thrAll, uniqFix];     grp = [varFree, meanFree, thrAll, uniqFix]; break;
-    case 'varcov':     main = [...by, varFix, ...covLabels, meanFix, thrAll, uniqFix]; grp = [varFix, ...covLabels, meanFree, thrAll, uniqFix]; break;
-    case 'latentmean': main = [...by, varFix, ...covLabels, meanFix, thrAll, uniqFix]; grp = [varFix, ...covLabels, meanFix, thrAll, uniqFix]; break;
-    default: throw new Error(`Unknown invariance step: ${step}`);
-  }
-
-  // DIFFTEST chain between adjacent selected steps, with this chain's own file prefix.
-  const seq = spec.groups.invariance?.sequence || INV_SEQUENCE;
-  const pos = seq.indexOf(step);
-  const chained = /MV$/i.test(spec.estimator || '');
-  const difftestIn = chained && pos > 0 ? diffTestName(seq[pos - 1], 'BifactorInv') : null;
-  const difftestOut = chained && pos >= 0 && pos < seq.length - 1 ? diffTestName(step, 'BifactorInv') : null;
-
-  const lines = [
-    ...titleLine(`MG invariance (bifactor-ESEM) - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', parameterization: 'THETA', iterations: 100000, difftestIn, grouping: true }),
-    'MODEL:', ...main,
-  ];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
-  lines.push(...outputBlock(spec));
-  if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
-  return lines.join('\n') + '\n';
-}
-
-// ---------- Multi-group measurement invariance (CFA and bifactor-CFA) ----------
-// The same six cumulative steps as the ESEM chains, on the independent-cluster measurement models:
-// CFA = one BY line per factor (first loading free, variances fixed to 1); bifactor-CFA = a G factor on
-// every item plus the specific factors, all orthogonal (fixed @0 in the overall MODEL, hence in every
-// group). Loadings are invariant by default from the metric step on (BY omitted in the group sections);
-// the configural model repeats the BY lines per group to free them. Bifactor-CFA has no factor
-// covariances, so its var–cov step equates the variances only. Continuous items follow the intercept
-// chain, categorical items the thresholds/THETA chain with its own DIFFTEST files (CfaInv_diff_*,
-// BifactorCfaInv_diff_*), so four chains can share one folder.
-function cfaFamily(spec, bifactor) {
-  const ids = factorIds(spec);
-  const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
-  const all = bifactor ? ['G', ...ids] : ids;
-  const by = [];
-  if (bifactor) by.push(cfaByLine('G', spec.items));
-  for (const f of spec.factors) by.push(cfaByLine(f.id, mainItemsForFactor(spec, f.id)));
-  if (bifactor) by.push(...orthogonalityLines(all));
-  const covLabels = [];
-  if (!bifactor) { let c = 1; for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) covLabels.push(`${ids[i]} WITH ${ids[j]} (cov${c++});`); }
-  return {
-    by, covLabels,
-    varFix: bifactor ? `G@1; ${range}@1;` : `${range}@1;`,
-    meanFix: bifactor ? `[G@0]; [${range}@0];` : `[${range}@0];`,
-    varFree: wrapList(all.map((id) => `${id}*;`)),
-    meanFree: wrapList(all.map((id) => `[${id}*];`)),
-    title: bifactor ? 'bifactor-CFA' : 'CFA',
-    diffPrefix: bifactor ? 'BifactorCfaInv' : 'CfaInv',
-    iterations: bifactor ? 10000 : undefined,
-  };
-}
-
-function buildInvarianceCfaFamily(spec, step, bifactor) {
-  if (isCategoricalInvariance(spec)) return buildInvarianceCfaFamilyCategorical(spec, step, bifactor);
-  const items = spec.items, N = items.length;
-  const { by, covLabels, varFix, meanFix, varFree, meanFree, title, iterations } = cfaFamily(spec, bifactor);
-  const intFree = stmt([`[${items[0]}`, ...items.slice(1, -1), `${items[N - 1]}]`]);
-  const intInv = chunkLabeled(items, 'i', true);
-  const uniqFree = stmt(items);
-  const uniqInv = chunkLabeled(items, 'u', false);
-
-  let main, grp;
-  switch (step) {
-    case 'configural': main = [...by, varFix, meanFix, intFree, uniqFree]; grp = [...by, varFix, meanFix, intFree, uniqFree]; break;
-    case 'metric':     main = [...by, varFix, meanFix, intFree, uniqFree]; grp = [varFree, meanFix, intFree, uniqFree]; break;
-    case 'scalar':     main = [...by, varFix, meanFix, intInv, uniqFree];  grp = [varFree, meanFree, intInv, uniqFree]; break;
-    case 'strict':     main = [...by, varFix, meanFix, intInv, uniqInv];   grp = [varFree, meanFree, intInv, uniqInv]; break;
-    case 'varcov':     main = [...by, varFix, ...covLabels, meanFix, intInv, uniqInv]; grp = [varFix, ...covLabels, meanFree, intInv, uniqInv]; break;
-    case 'latentmean': main = [...by, varFix, ...covLabels, meanFix, intInv, uniqInv]; grp = [varFix, ...covLabels, meanFix, intInv, uniqInv]; break;
-    default: throw new Error(`Unknown invariance step: ${step}`);
-  }
-
-  const lines = [...titleLine(`MG invariance (${title}) - ${INV_META[step].label}`), ...headerBlocks(spec, { rotation: false, iterations, grouping: true }), 'MODEL:', ...main];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
-  lines.push(...outputBlock(spec));
-  return lines.join('\n') + '\n';
-}
-
-function buildInvarianceCfaFamilyCategorical(spec, step, bifactor) {
-  const items = spec.items;
-  const { by, covLabels, varFix, meanFix, varFree, meanFree, title, diffPrefix, iterations } = cfaFamily(spec, bifactor);
-  const counts = thresholdCounts(spec);
-  const { refs } = thresholdReferents(spec, counts, { general: bifactor }); // one referent per factor (+ one for G)
-  const thrPartial = thresholdLines(spec, 'partial', counts, refs);
-  const thrAll = thresholdLines(spec, 'all', counts, refs);
-  const uniqFix = wrapList(items.map((it) => `${it}@1;`));
-  const uniqFree = wrapList(items.map((it) => `${it}*;`));
-
-  let main, grp;
-  switch (step) {
-    case 'configural': main = [...by, varFix, meanFix, thrPartial, uniqFix]; grp = [...by, varFix, meanFree, thrPartial, uniqFree]; break;
-    case 'metric':     main = [...by, varFix, meanFix, thrPartial, uniqFix]; grp = [varFree, meanFree, thrPartial, uniqFree]; break;
-    case 'scalar':     main = [...by, varFix, meanFix, thrAll, uniqFix];     grp = [varFree, meanFree, thrAll, uniqFree]; break;
-    case 'strict':     main = [...by, varFix, meanFix, thrAll, uniqFix];     grp = [varFree, meanFree, thrAll, uniqFix]; break;
-    case 'varcov':     main = [...by, varFix, ...covLabels, meanFix, thrAll, uniqFix]; grp = [varFix, ...covLabels, meanFree, thrAll, uniqFix]; break;
-    case 'latentmean': main = [...by, varFix, ...covLabels, meanFix, thrAll, uniqFix]; grp = [varFix, ...covLabels, meanFix, thrAll, uniqFix]; break;
-    default: throw new Error(`Unknown invariance step: ${step}`);
-  }
-
-  const seq = spec.groups.invariance?.sequence || INV_SEQUENCE;
-  const pos = seq.indexOf(step);
-  const chained = /MV$/i.test(spec.estimator || '');
-  const difftestIn = chained && pos > 0 ? diffTestName(seq[pos - 1], diffPrefix) : null;
-  const difftestOut = chained && pos >= 0 && pos < seq.length - 1 ? diffTestName(step, diffPrefix) : null;
-
-  const lines = [
-    ...titleLine(`MG invariance (${title}) - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotation: false, parameterization: 'THETA', iterations, difftestIn, grouping: true }),
-    'MODEL:', ...main,
-  ];
-  for (const code of spec.groups.codes.slice(1)) { lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp); }
-  lines.push(...outputBlock(spec));
-  if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
-  return lines.join('\n') + '\n';
+function buildMgInvariance(spec, mt, step, variant = '') {
+  return isCategoricalInvariance(spec) ? buildMgCategorical(spec, mt, step, variant) : buildMgContinuous(spec, mt, step, variant);
 }
 
 // ---------- Longitudinal (2-wave, within-person) measurement invariance ----------
-// Single group, two measurement blocks (one per wave) sharing ONE factor pattern. Loadings are
-// equated across waves via the ESEM block flag "(*tN 1)" (Morin et al.) or, for CFA, via shared BY
-// labels. Residual & intercept invariance reuse chunkLabeled, whose labels are POSITION-based
-// (i1-i6 / u1-u6) and therefore identical for both waves → cross-wave equality for free. Each
-// indicator's residual is correlated across the two waves with PWITH. The app's CUMULATIVE step
-// order (configural→metric→scalar→strict→varcov→latentmean) reproduces Morin's per-block syntax but
-// bundles it so df increases monotonically for the comparison table (his M-numbering is not cumulative).
+// Single group, two measurement blocks (one per wave) sharing ONE factor pattern. Loadings are equated across
+// waves via the ESEM block flag "(*tN 1)" (Morin et al.) or, for the CFA families, via shared BY labels.
+// Residual & intercept invariance reuse the position-based labels (i1-i6 / u1-u6), identical for both waves →
+// cross-wave equality for free; a partial model writes the freed pair as "[z2_t1*]; … [z2_t2*];" (Morin's T34).
+// Each indicator's residual is correlated across the two waves with PWITH-equivalent WITH statements. The
+// app's CUMULATIVE step order (configural→weak→strong→strict→varcov→latent means) reproduces Morin's
+// per-block syntax but bundles it so df increases monotonically for the comparison table.
 function longRanges(k) {
   return { t1: k > 1 ? `F1-F${k}` : 'F1', t2: k > 1 ? `F${k + 1}-F${2 * k}` : `F${k + 1}` };
 }
-// Correlated uniquenesses across waves: one "WITH" per matching indicator. Equivalent to Mplus
-// PWITH, but PWITH requires its two lists to stay on a single line — they break ("mismatched
-// variables for PWITH") once wrapped for many indicators — so we emit explicit pairwise statements,
-// which are robust for any indicator count and stay well under the 90-char limit.
+// Correlated uniquenesses across waves: one "WITH" per matching indicator. Equivalent to Mplus PWITH, but PWITH
+// requires its two lists to stay on a single line — they break ("mismatched variables for PWITH") once wrapped
+// for many indicators — so we emit explicit pairwise statements, robust for any indicator count.
 function pwithLines(a, b) { return a.map((it, i) => `${it} WITH ${b[i]};`); }
-// Cross-sectional factor covariance equality: each matching within-wave pair shares one label.
-function longCovLabels(k) {
+// Cross-sectional factor covariance equality: each matching within-wave pair shares one label; a freed pair
+// (partial var–cov, CFA) is written unlabelled at both waves.
+function longCovLabels(k, free = new Set()) {
   const out = [];
   let c = 1;
   for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) {
-    out.push(`F${i + 1} WITH F${j + 1} (lcov${c});`);
-    out.push(`F${k + i + 1} WITH F${k + j + 1} (lcov${c});`);
+    const lab = free.has(`F${i + 1}~F${j + 1}`) ? '' : ` (lcov${c})`;
+    out.push(`F${i + 1} WITH F${j + 1}${lab};`, `F${k + i + 1} WITH F${k + j + 1}${lab};`);
     c++;
   }
   return out;
 }
-// Which cumulative constraints a step adds (shared by the ESEM and CFA builders).
-function longFlags(step) {
-  return {
-    equate: step !== 'configural',                                          // loadings equal across waves
-    residuals: step === 'strict' || step === 'varcov' || step === 'latentmean',
-    intercepts: step === 'scalar' || step === 'strict' || step === 'varcov' || step === 'latentmean',
-    varcov: step === 'varcov' || step === 'latentmean',                     // T2 var refixed @1 + cov equal
-    meanFix: step === 'latentmean',                                         // T2 latent means refixed @0
-  };
+// Which cumulative constraints a step adds (shared by the ESEM, CFA and categorical builders), with the branch.
+function longPlan(spec, mt, step, variant) {
+  const p = stepPlan(spec, 'time', mt, step, variant);
+  return { ...p, equate: p.loadings, meanFix: p.means };
 }
-// Intercept / mean lines common to both builders (only when intercepts are equated).
-function longInterceptMeanLines(t1, t2, t1r, t2r, meanFix) {
-  return [
-    chunkLabeled(t1, 'i', true), chunkLabeled(t2, 'i', true), // [..] (i1-i6) on both waves → equal intercepts
-    `[${t1r}@0];`,                                            // Time-1 latent means fixed (identification)
-    meanFix ? `[${t2r}@0];` : `[${t2r}];`,                    // free Time-2 means (refix @0 for the mean test)
-  ];
+// Time-2 factor variances refixed @1 (freed ones stay *) and Time-2 means refixed @0 (freed ones stay free).
+function t2VarLines(k, free, gid = null, gFirst = false) {
+  const t2r = longRanges(k).t2;
+  if (!free.size) return gid ? (gFirst ? ['G2@1;', `${t2r}@1;`] : [`${t2r}@1;`, 'G2@1;']) : [`${t2r}@1;`];
+  const fs = Array.from({ length: k }, (_, i) => `F${i + 1}`);                  // the Time-1 names the ids use
+  const ids = gid ? (gFirst ? [gid, ...fs] : [...fs, gid]) : fs;
+  const t2 = (id) => (id === gid ? 'G2' : `F${k + Number(id.slice(1))}`);
+  return ids.map((id) => `${t2(id)}${free.has(id) ? '*' : '@1'};`);
+}
+function t2MeanLines(k, free, gid = null) {
+  const ids = [...Array.from({ length: k }, (_, i) => `F${i + 1}`), ...(gid ? [gid] : [])];
+  const t2 = (id) => (id === gid ? 'G2' : `F${k + Number(id.slice(1))}`);
+  if (!free.size) return [`[${longRanges(k).t2}@0];`, ...(gid ? ['[G2@0];'] : [])];
+  return ids.map((id) => `[${t2(id)}${free.has(id) ? '' : '@0'}];`);
+}
+// Intercept / mean lines common to the builders (only when intercepts are equated): labelled pairs, the freed
+// pairs written "[item*]" at both waves; Time-1 latent means fixed, Time-2 means free (refixed for the mean test).
+function longInterceptMeanLines(t1, t2, k, f, freeIdx, gid = null) {
+  const out = [labeledExcept(t1, 'i', true, freeIdx), labeledExcept(t2, 'i', true, freeIdx), `[${longRanges(k).t1}@0];`];
+  if (gid) out.push('[G1@0];');
+  out.push(...(f.meanFix ? t2MeanLines(k, f.free.means, gid) : [`[${longRanges(k).t2}];`, ...(gid ? ['[G2];'] : [])]));
+  return out;
 }
 
 // One wave's ESEM target blocks — F<fBase+j> BY <main items> <other items>~0 (*t<w>); the Time-2 main items are the
@@ -686,149 +620,82 @@ function waveTargetBlocks(spec, items, fBase, tag) {
     return stmt([`F${fBase + fi} BY`, ...items.map((it) => (mains.has(it) ? it : `${it}~0`)), tag]);
   });
 }
-
-function buildLongInvarianceESEM(spec, step) {
-  const [t1, t2] = spec.longitudinal.waves;
-  const k = spec.factors.length;
-  const { t1: t1r, t2: t2r } = longRanges(k);
-  const f = longFlags(step);
-  const flag = (w) => `(*${w}${f.equate ? ' 1' : ''})`;
-  const by = spec.rotation.type === 'TARGET'
-    ? [...waveTargetBlocks(spec, t1, 1, flag('t1')), ...waveTargetBlocks(spec, t2, k + 1, flag('t2'))]
-    : [stmt([`${t1r} BY`, ...t1, flag('t1')]), stmt([`${t2r} BY`, ...t2, flag('t2')])];
-  const lines = [
-    ...titleLine(`Longitudinal invariance - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotation: true, iterations: 10000, useVars: [...t1, ...t2] }),
-    'MODEL:',
-    ...by,
-  ];
-  if (f.residuals) { lines.push(chunkLabeled(t1, 'u', false)); lines.push(chunkLabeled(t2, 'u', false)); }
-  if (f.varcov) { lines.push(`${t2r}@1;`); lines.push(...longCovLabels(k)); } // T1 vars @1 by ESEM default
-  if (f.intercepts) lines.push(...longInterceptMeanLines(t1, t2, t1r, t2r, f.meanFix));
-  if (spec.longitudinal.correlatedUniqueness) lines.push(...pwithLines(t1, t2));
-  lines.push(...outputBlock(spec));
-  return lines.join('\n') + '\n';
+// One wave's bifactor-ESEM set: G on all items, then each specific factor's target block.
+function waveBifactorBlocks(spec, items, gid, fBase, tag) {
+  const [t1] = spec.longitudinal.waves;
+  const out = [stmt([`${gid} BY`, ...items, tag])];
+  spec.factors.forEach((fac, fi) => {
+    const mains = new Set(mainItemsForFactor(spec, fac.id).map((it) => (items === t1 ? it : waveCounterpart(spec, it))));
+    out.push(stmt([`F${fBase + fi} BY`, ...items.map((it) => (mains.has(it) ? it : `${it}~0`)), tag]));
+  });
+  return out;
 }
+// CFA-family BY lines across waves, standardized-factor identification (first loading free *). Loadings are
+// equated across waves via shared labels (L<f>_<p> / LG_<p>). Mplus rejects inline per-item labels on one BY
+// line ("F1 BY X1* (L1_1) X2 …"), so when labelling we emit ONE BY statement per loading; a freed loading
+// (partial weak invariance) is the unlabelled statement at both waves.
+function cfaWaveByLines(fid, items, tag, equate, freePos = new Set()) {
+  if (!equate) return [stmt([`${fid} BY`, ...items.map((it, p) => (p === 0 ? `${it}*` : it))])];
+  return items.map((it, p) => stmt([`${fid} BY`, p === 0 ? `${it}*` : it, ...(freePos.has(p) ? [] : [`(${tag}_${p + 1})`])]));
+}
+/** Freed loading ids 'F1:X3' / 'G:X3' → the positions to leave unlabelled within each factor's BY statements. */
+function freeLoadingPositions(spec, free, fid, items) {
+  return new Set([...free].filter((id) => id.startsWith(`${fid}:`)).map((id) => items.indexOf(id.slice(fid.length + 1))).filter((p) => p >= 0));
+}
+/** Time-2 residual lines of the CFA-family and ESEM builders when uniquenesses are equated. */
+function longResidualLines(t1, t2, freeIdx) { return [labeledExcept(t1, 'u', false, freeIdx), labeledExcept(t2, 'u', false, freeIdx)]; }
 
-// Bifactor-ESEM longitudinal invariance (Morin, Hoyle Handbook Ch. 27, T28–T41): per wave one
-// general factor on all indicators plus one target block per specific factor, all in a single
-// orthogonal-target ESEM set — G1/F1..Fk at Time 1 (*t1), G2/F(k+1)..F2k at Time 2 (*t2).
-// varcov refixes the T2 variances AND equates every within-wave factor covariance across waves
-// (G included): Mplus rejects a variances-only refix for an EFA set (error 1001) — the full
-// var-cov pattern must be specified together. ITERATIONS raised per Morin's own settings for
-// this model family. NOTE: Morin's published Data-2 strong→means models are PARTIAL (his z2
-// intercept is non-invariant by design); the app emits FULL invariance, so on data with a truly
-// non-invariant intercept the scalar/strict/varcov steps may not converge — that is the data
-// speaking, not the syntax.
-function buildLongInvarianceBifactorEsem(spec, step) {
+const LONG_TITLE = { esem: 'Longitudinal invariance', cfa: 'Longitudinal invariance (CFA)', besem: 'Longitudinal invariance (bifactor-ESEM)', bcfa: 'Longitudinal invariance (bifactor-CFA)' };
+const LONG_HEADER = {
+  esem: { rotation: true, iterations: 10000 },
+  cfa: { rotation: false },
+  // bifactor-ESEM across waves (Morin, T28–T41): 100000 iterations, the most iteration-hungry family
+  besem: { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', iterations: 100000 },
+  bcfa: { rotation: false, iterations: 10000 },
+};
+
+function buildLongContinuous(spec, mt, step, variant) {
   const [t1, t2] = spec.longitudinal.waves;
   const k = spec.factors.length;
   const { t1: t1r, t2: t2r } = longRanges(k);
-  const f = longFlags(step);
+  const f = longPlan(spec, mt, step, variant);
+  const bifactor = mt === 'besem' || mt === 'bcfa';
+  const gid = bifactor ? 'G' : null;
   const flag = (w) => `(*${w}${f.equate ? ' 1' : ''})`;
-  const lines = [
-    ...titleLine(`Longitudinal invariance (bifactor-ESEM) - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', iterations: 100000, useVars: [...t1, ...t2] }),
-    'MODEL:',
-  ];
-  // one wave's measurement set: G on all items, then each specific factor's target block
-  const waveBlocks = (items, gid, fBase, tag) => {
-    const out = [stmt([`${gid} BY`, ...items, tag])];
-    spec.factors.forEach((fac, fi) => {
-      const mains = new Set(mainItemsForFactor(spec, fac.id).map((it) => items === t1 ? it : waveCounterpart(spec, it)));
-      out.push(stmt([`F${fBase + fi} BY`, ...items.map((it) => (mains.has(it) ? it : `${it}~0`)), tag]));
-    });
-    return out;
-  };
-  lines.push(...waveBlocks(t1, 'G1', 1, flag('t1')));
-  lines.push(...waveBlocks(t2, 'G2', k + 1, flag('t2')));
-  if (f.residuals) { lines.push(chunkLabeled(t1, 'u', false)); lines.push(chunkLabeled(t2, 'u', false)); }
-  if (f.varcov) {
-    lines.push(`${t2r}@1;`, 'G2@1;');
-    const fact1 = ['G1', ...Array.from({ length: k }, (_, i) => `F${i + 1}`)];
-    const fact2 = ['G2', ...Array.from({ length: k }, (_, i) => `F${k + i + 1}`)];
-    let c = 1;
-    for (let i = 0; i < fact1.length; i++) for (let j = i + 1; j < fact1.length; j++) {
-      lines.push(`${fact1[i]} WITH ${fact1[j]} (lcov${c});`);
-      lines.push(`${fact2[i]} WITH ${fact2[j]} (lcov${c});`);
-      c++;
+  const lines = [...titleLine(`${LONG_TITLE[mt]} - ${stepLabel(step)}${branchTag(f)}`), ...headerBlocks(spec, { ...LONG_HEADER[mt], useVars: [...t1, ...t2] }), 'MODEL:'];
+  // measurement blocks
+  if (mt === 'esem') {
+    lines.push(...(spec.rotation.type === 'TARGET'
+      ? [...waveTargetBlocks(spec, t1, 1, flag('t1')), ...waveTargetBlocks(spec, t2, k + 1, flag('t2'))]
+      : [stmt([`${t1r} BY`, ...t1, flag('t1')]), stmt([`${t2r} BY`, ...t2, flag('t2')])]));
+  } else if (mt === 'besem') {
+    lines.push(...waveBifactorBlocks(spec, t1, 'G1', 1, flag('t1')), ...waveBifactorBlocks(spec, t2, 'G2', k + 1, flag('t2')));
+  } else {
+    // CFA families: Time-1 factors (F1..Fk) before Time-2 factors (F(k+1)..F2k) so the range syntax stays contiguous
+    if (bifactor) lines.push(...cfaWaveByLines('G1', t1, 'LG', f.equate, freeLoadingPositions(spec, f.free.loadings, 'G', t1)));
+    spec.factors.forEach((fac, fi) => lines.push(...cfaWaveByLines(`F${fi + 1}`, mainItemsForFactor(spec, fac.id), `L${fi + 1}`, f.equate, freeLoadingPositions(spec, f.free.loadings, fac.id, mainItemsForFactor(spec, fac.id)))));
+    if (bifactor) lines.push(...cfaWaveByLines('G2', t2, 'LG', f.equate, freeLoadingPositions(spec, f.free.loadings, 'G', t1)));
+    spec.factors.forEach((fac, fi) => lines.push(...cfaWaveByLines(`F${k + fi + 1}`, mainItemsForFactor(spec, fac.id).map((it) => waveCounterpart(spec, it)), `L${fi + 1}`, f.equate, freeLoadingPositions(spec, f.free.loadings, fac.id, mainItemsForFactor(spec, fac.id)))));
+    lines.push(...(bifactor ? ['G1@1;'] : []), `${t1r}@1;`);                 // Time-1 factor variances fix the metric
+    if (!f.equate || f.varcov) lines.push(...(f.varcov ? t2VarLines(k, f.free.varcov, gid, true) : [...(bifactor ? ['G2@1;'] : []), `${t2r}@1;`])); // T2 vars: @1 at configural & varcov+, else free
+    if (bifactor) {
+      const w1 = ['G1', ...Array.from({ length: k }, (_, i) => `F${i + 1}`)];
+      const w2 = ['G2', ...Array.from({ length: k }, (_, i) => `F${k + i + 1}`)];
+      lines.push(...orthogonalityLines(w1), ...orthogonalityLines(w2));     // bifactor: orthogonal within each wave
     }
   }
-  if (f.intercepts) {
-    lines.push(chunkLabeled(t1, 'i', true), chunkLabeled(t2, 'i', true));
-    lines.push(`[${t1r}@0];`, '[G1@0];');
-    lines.push(f.meanFix ? `[${t2r}@0];` : `[${t2r}];`, f.meanFix ? '[G2@0];' : '[G2];');
+  if (f.residuals) lines.push(...longResidualLines(t1, t2, positionsOf(t1, f.free.residuals)));
+  if (f.varcov) {
+    if (mt === 'esem') lines.push(...t2VarLines(k, f.free.varcov), ...longCovLabels(k, f.free.varcov)); // T1 vars @1 by ESEM default
+    else if (mt === 'besem') {
+      lines.push(...t2VarLines(k, f.free.varcov, 'G'));
+      const fact1 = ['G1', ...Array.from({ length: k }, (_, i) => `F${i + 1}`)];
+      const fact2 = ['G2', ...Array.from({ length: k }, (_, i) => `F${k + i + 1}`)];
+      let c = 1;
+      for (let i = 0; i < fact1.length; i++) for (let j = i + 1; j < fact1.length; j++) { lines.push(`${fact1[i]} WITH ${fact1[j]} (lcov${c});`, `${fact2[i]} WITH ${fact2[j]} (lcov${c});`); c++; }
+    } else if (mt === 'cfa') lines.push(...longCovLabels(k, f.free.varcov));
   }
-  if (spec.longitudinal.correlatedUniqueness) lines.push(...pwithLines(t1, t2));
-  lines.push(...outputBlock(spec));
-  return lines.join('\n') + '\n';
-}
-
-function buildLongInvarianceCFA(spec, step) {
-  const [t1, t2] = spec.longitudinal.waves;
-  const k = spec.factors.length;
-  const { t1: t1r, t2: t2r } = longRanges(k);
-  const f = longFlags(step);
-  const lines = [
-    ...titleLine(`Longitudinal invariance (CFA) - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotation: false, useVars: [...t1, ...t2] }),
-    'MODEL:',
-  ];
-  // BY lines, standardized-factor identification (first loading free *). Loadings are equated
-  // across waves via shared labels (Lf_p). Mplus rejects inline per-item labels on one BY line
-  // ("F1 BY X1* (L1_1) X2 ..."), so when labelling we emit ONE BY statement per loading. Time-1
-  // factors (F1..Fk) are defined BEFORE Time-2 factors (F(k+1)..F2k) so the "F1-Fk"/"F(k+1)-F2k"
-  // range syntax used below for variances/means stays contiguous in Mplus factor order.
-  const byLines = (fNum, items, fi) => {
-    if (!f.equate) return [stmt([`F${fNum} BY`, ...items.map((it, p) => (p === 0 ? `${it}*` : it))])];
-    return items.map((it, p) => stmt([`F${fNum} BY`, p === 0 ? `${it}*` : it, `(L${fi + 1}_${p + 1})`]));
-  };
-  spec.factors.forEach((fac, fi) => lines.push(...byLines(fi + 1, mainItemsForFactor(spec, fac.id), fi)));
-  spec.factors.forEach((fac, fi) => lines.push(...byLines(k + fi + 1, mainItemsForFactor(spec, fac.id).map((it) => waveCounterpart(spec, it)), fi)));
-  lines.push(`${t1r}@1;`);                                    // Time-1 factor variances fix the metric
-  if (!f.equate || f.varcov) lines.push(`${t2r}@1;`);         // T2 vars: @1 at configural & varcov+, else free
-  if (f.residuals) { lines.push(chunkLabeled(t1, 'u', false)); lines.push(chunkLabeled(t2, 'u', false)); }
-  if (f.varcov) lines.push(...longCovLabels(k));
-  if (f.intercepts) lines.push(...longInterceptMeanLines(t1, t2, t1r, t2r, f.meanFix));
-  if (spec.longitudinal.correlatedUniqueness) lines.push(...pwithLines(t1, t2));
-  lines.push(...outputBlock(spec));
-  return lines.join('\n') + '\n';
-}
-
-// Bifactor-CFA across two waves: G1 / F1..Fk at Time 1 and G2 / F(k+1)..F2k at Time 2, every factor of a
-// wave orthogonal to the others of that wave (G WITH F@0, F WITH F@0), cross-wave covariances free. Loadings
-// are equated across waves through shared labels (LG_p for the general factor, Lf_p for the specific
-// factors), one BY statement per loading as in the CFA builder. Without factor covariances within a wave,
-// the var–cov step refixes the Time-2 variances only; everything else mirrors the CFA chain.
-function buildLongInvarianceBifactorCfa(spec, step) {
-  const [t1, t2] = spec.longitudinal.waves;
-  const k = spec.factors.length;
-  const { t1: t1r, t2: t2r } = longRanges(k);
-  const f = longFlags(step);
-  const lines = [
-    ...titleLine(`Longitudinal invariance (bifactor-CFA) - ${INV_META[step].label}`),
-    ...headerBlocks(spec, { rotation: false, iterations: 10000, useVars: [...t1, ...t2] }),
-    'MODEL:',
-  ];
-  const byLines = (fid, items, tag) => {
-    if (!f.equate) return [stmt([`${fid} BY`, ...items.map((it, p) => (p === 0 ? `${it}*` : it))])];
-    return items.map((it, p) => stmt([`${fid} BY`, p === 0 ? `${it}*` : it, `(${tag}_${p + 1})`]));
-  };
-  lines.push(...byLines('G1', t1, 'LG'));
-  spec.factors.forEach((fac, fi) => lines.push(...byLines(`F${fi + 1}`, mainItemsForFactor(spec, fac.id), `L${fi + 1}`)));
-  lines.push(...byLines('G2', t2, 'LG'));
-  spec.factors.forEach((fac, fi) => lines.push(...byLines(`F${k + fi + 1}`, mainItemsForFactor(spec, fac.id).map((it) => waveCounterpart(spec, it)), `L${fi + 1}`)));
-  lines.push('G1@1;', `${t1r}@1;`);                                   // Time-1 factor variances fix the metric
-  if (!f.equate || f.varcov) lines.push('G2@1;', `${t2r}@1;`);        // T2 vars: @1 at configural & varcov+, else free
-  const w1 = ['G1', ...Array.from({ length: k }, (_, i) => `F${i + 1}`)];
-  const w2 = ['G2', ...Array.from({ length: k }, (_, i) => `F${k + i + 1}`)];
-  lines.push(...orthogonalityLines(w1), ...orthogonalityLines(w2));    // bifactor: orthogonal within each wave
-  if (f.residuals) { lines.push(chunkLabeled(t1, 'u', false)); lines.push(chunkLabeled(t2, 'u', false)); }
-  if (f.intercepts) {
-    lines.push(chunkLabeled(t1, 'i', true), chunkLabeled(t2, 'i', true));
-    lines.push(`[${t1r}@0];`, '[G1@0];');
-    lines.push(f.meanFix ? `[${t2r}@0];` : `[${t2r}];`, f.meanFix ? '[G2@0];' : '[G2];');
-  }
+  if (f.intercepts) lines.push(...longInterceptMeanLines(t1, t2, k, f, positionsOf(t1, f.free.intercepts), gid));
   if (spec.longitudinal.correlatedUniqueness) lines.push(...pwithLines(t1, t2));
   lines.push(...outputBlock(spec));
   return lines.join('\n') + '\n';
@@ -839,88 +706,69 @@ function buildLongInvarianceBifactorCfa(spec, step) {
 // two waves within one group: thresholds are equated across waves through shared labels th<item#>_<threshold#>
 // — the first threshold of every item plus the second threshold of one referent item per factor (and one for G)
 // from the configural model on, which identifies the Time-2 latent means from the start; THETA parameterization
-// with the Time-1 uniquenesses fixed at 1 and the Time-2 ones free until the strict step refixes them; the metric,
-// var–cov and latent-mean steps constrain what the continuous chain constrains; DIFFTEST chains the adjacent
-// selected steps with this chain's own files (LongInv_<mt>_diff_<step>.dat).
+// with the Time-1 uniquenesses fixed at 1 and the Time-2 ones free until the strict step refixes them; the weak,
+// var–cov and latent-mean steps constrain what the continuous chain constrains; a partial strong model keeps the
+// configural treatment for the freed items; DIFFTEST chains the adjacent selected steps with this chain's own
+// files (LongInv_<mt>_diff_<step>.dat).
 function isCategoricalLongitudinal(spec) {
   const cols = [...(spec.longitudinal?.waves?.[0] || []), ...(spec.longitudinal?.waves?.[1] || [])];
   const cat = spec.data?.categorical || [];
   return cols.length > 0 && cols.every((c) => cat.includes(c));
 }
-function buildLongInvarianceCategorical(spec, mt, step) {
+function buildLongCategorical(spec, mt, step, variant) {
   const [t1, t2] = spec.longitudinal.waves;
   const k = spec.factors.length;
   const { t1: t1r, t2: t2r } = longRanges(k);
-  const f = longFlags(step);
+  const f = longPlan(spec, mt, step, variant);
   const bifactor = mt === 'besem' || mt === 'bcfa';
+  const gid = bifactor ? 'G' : null;
   const counts = thresholdCounts(spec);                                  // Time-1 items; Time-2 carries the same categories (validated)
   const { refs } = thresholdReferents(spec, counts, { general: bifactor });
-  const allThr = f.intercepts;                                           // scalar and later: every threshold equated
+  const freeThr = positionsOf(t1, f.free.intercepts), freeRes = positionsOf(t1, f.free.residuals);
   const thrLines = (items) => {
     const parts = [];
     items.forEach((it, p) => {
       const n = counts[t1[p]] || 1;
+      const allHere = f.intercepts && !freeThr.has(p);                   // strong and later: every threshold equated, freed items keep the configural treatment
       for (let j = 1; j <= n; j++) {
-        const labelled = allThr || j === 1 || (j === 2 && refs.has(t1[p]));
+        const labelled = allHere || j === 1 || (j === 2 && refs.has(t1[p]));
         parts.push(labelled ? `[${it}$${j}] (th${p + 1}_${j});` : `[${it}$${j}];`);
       }
     });
     return wrapList(parts);
   };
   const flag = (w) => `(*${w}${f.equate ? ' 1' : ''})`;
-  const byLines = (fid, items, tag) => {
-    if (!f.equate) return [stmt([`${fid} BY`, ...items.map((it, p) => (p === 0 ? `${it}*` : it))])];
-    return items.map((it, p) => stmt([`${fid} BY`, p === 0 ? `${it}*` : it, `(${tag}_${p + 1})`]));
-  };
-  const titles = { esem: 'Longitudinal invariance', cfa: 'Longitudinal invariance (CFA)', besem: 'Longitudinal invariance (bifactor-ESEM)', bcfa: 'Longitudinal invariance (bifactor-CFA)' };
-  const header = {
-    esem: { rotation: true, iterations: 10000 },
-    cfa: { rotation: false, iterations: 10000 },
-    besem: { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', iterations: 100000 },
-    bcfa: { rotation: false, iterations: 10000 },
-  }[mt];
   const seq = spec.longitudinal.invariance?.sequence || INV_SEQUENCE;
-  const pos = seq.indexOf(step);
-  const chained = /MV$/i.test(spec.estimator || '');
-  const prefix = `LongInv_${mt}`;
-  const difftestIn = chained && pos > 0 ? diffTestName(seq[pos - 1], prefix) : null;
-  const difftestOut = chained && pos >= 0 && pos < seq.length - 1 ? diffTestName(step, prefix) : null;
-
-  const lines = [...titleLine(`${titles[mt]} - ${INV_META[step].label}`), ...headerBlocks(spec, { ...header, parameterization: 'THETA', difftestIn, useVars: [...t1, ...t2] }), 'MODEL:'];
+  const { difftestIn, difftestOut } = diffTestLinks(spec, 'time', mt, step, variant, seq, `LongInv_${mt}`);
+  const header = { ...LONG_HEADER[mt], parameterization: 'THETA', difftestIn, useVars: [...t1, ...t2] };
+  if (mt === 'cfa') header.iterations = 10000;
+  const lines = [...titleLine(`${LONG_TITLE[mt]} - ${stepLabel(step, { thresholds: true })}${branchTag(f)}`), ...headerBlocks(spec, header), 'MODEL:'];
   // measurement blocks — the same forms as the continuous builders
   if (mt === 'esem') {
     lines.push(stmt([`${t1r} BY`, ...t1, flag('t1')]), stmt([`${t2r} BY`, ...t2, flag('t2')]));
-    if (f.varcov) lines.push(`${t2r}@1;`, ...longCovLabels(k));
+    if (f.varcov) lines.push(...t2VarLines(k, f.free.varcov), ...longCovLabels(k, f.free.varcov));
   } else if (mt === 'cfa') {
-    spec.factors.forEach((fac, fi) => lines.push(...byLines(`F${fi + 1}`, mainItemsForFactor(spec, fac.id), `L${fi + 1}`)));
-    spec.factors.forEach((fac, fi) => lines.push(...byLines(`F${k + fi + 1}`, mainItemsForFactor(spec, fac.id).map((it) => waveCounterpart(spec, it)), `L${fi + 1}`)));
+    spec.factors.forEach((fac, fi) => lines.push(...cfaWaveByLines(`F${fi + 1}`, mainItemsForFactor(spec, fac.id), `L${fi + 1}`, f.equate, freeLoadingPositions(spec, f.free.loadings, fac.id, mainItemsForFactor(spec, fac.id)))));
+    spec.factors.forEach((fac, fi) => lines.push(...cfaWaveByLines(`F${k + fi + 1}`, mainItemsForFactor(spec, fac.id).map((it) => waveCounterpart(spec, it)), `L${fi + 1}`, f.equate, freeLoadingPositions(spec, f.free.loadings, fac.id, mainItemsForFactor(spec, fac.id)))));
     lines.push(`${t1r}@1;`);
-    if (!f.equate || f.varcov) lines.push(`${t2r}@1;`);
-    if (f.varcov) lines.push(...longCovLabels(k));
+    if (!f.equate || f.varcov) lines.push(...(f.varcov ? t2VarLines(k, f.free.varcov) : [`${t2r}@1;`]));
+    if (f.varcov) lines.push(...longCovLabels(k, f.free.varcov));
   } else if (mt === 'besem') {
-    const waveBlocks = (items, gid, fBase, tag) => {
-      const out = [stmt([`${gid} BY`, ...items, tag])];
-      spec.factors.forEach((fac, fi) => {
-        const mains = new Set(mainItemsForFactor(spec, fac.id).map((it) => (items === t1 ? it : waveCounterpart(spec, it))));
-        out.push(stmt([`F${fBase + fi} BY`, ...items.map((it) => (mains.has(it) ? it : `${it}~0`)), tag]));
-      });
-      return out;
-    };
-    lines.push(...waveBlocks(t1, 'G1', 1, flag('t1')), ...waveBlocks(t2, 'G2', k + 1, flag('t2')));
+    lines.push(...waveBifactorBlocks(spec, t1, 'G1', 1, flag('t1')), ...waveBifactorBlocks(spec, t2, 'G2', k + 1, flag('t2')));
     if (f.varcov) {
-      lines.push(`${t2r}@1;`, 'G2@1;');
+      lines.push(...t2VarLines(k, f.free.varcov, 'G'));
       const fact1 = ['G1', ...Array.from({ length: k }, (_, i) => `F${i + 1}`)];
       const fact2 = ['G2', ...Array.from({ length: k }, (_, i) => `F${k + i + 1}`)];
       let c = 1;
       for (let i = 0; i < fact1.length; i++) for (let j = i + 1; j < fact1.length; j++) { lines.push(`${fact1[i]} WITH ${fact1[j]} (lcov${c});`, `${fact2[i]} WITH ${fact2[j]} (lcov${c});`); c++; }
     }
   } else {
-    lines.push(...byLines('G1', t1, 'LG'));
-    spec.factors.forEach((fac, fi) => lines.push(...byLines(`F${fi + 1}`, mainItemsForFactor(spec, fac.id), `L${fi + 1}`)));
-    lines.push(...byLines('G2', t2, 'LG'));
-    spec.factors.forEach((fac, fi) => lines.push(...byLines(`F${k + fi + 1}`, mainItemsForFactor(spec, fac.id).map((it) => waveCounterpart(spec, it)), `L${fi + 1}`)));
+    lines.push(...cfaWaveByLines('G1', t1, 'LG', f.equate, freeLoadingPositions(spec, f.free.loadings, 'G', t1)));
+    spec.factors.forEach((fac, fi) => lines.push(...cfaWaveByLines(`F${fi + 1}`, mainItemsForFactor(spec, fac.id), `L${fi + 1}`, f.equate, freeLoadingPositions(spec, f.free.loadings, fac.id, mainItemsForFactor(spec, fac.id)))));
+    lines.push(...cfaWaveByLines('G2', t2, 'LG', f.equate, freeLoadingPositions(spec, f.free.loadings, 'G', t1)));
+    spec.factors.forEach((fac, fi) => lines.push(...cfaWaveByLines(`F${k + fi + 1}`, mainItemsForFactor(spec, fac.id).map((it) => waveCounterpart(spec, it)), `L${fi + 1}`, f.equate, freeLoadingPositions(spec, f.free.loadings, fac.id, mainItemsForFactor(spec, fac.id)))));
     lines.push('G1@1;', `${t1r}@1;`);
-    if (!f.equate || f.varcov) lines.push('G2@1;', `${t2r}@1;`);
+    if (!f.equate || f.varcov) lines.push(...(f.varcov ? t2VarLines(k, f.free.varcov, 'G', true) : ['G2@1;', `${t2r}@1;`]));
     const w1 = ['G1', ...Array.from({ length: k }, (_, i) => `F${i + 1}`)];
     const w2 = ['G2', ...Array.from({ length: k }, (_, i) => `F${k + i + 1}`)];
     lines.push(...orthogonalityLines(w1), ...orthogonalityLines(w2));
@@ -928,32 +776,29 @@ function buildLongInvarianceCategorical(spec, mt, step) {
   // thresholds (equality across waves by shared labels), THETA uniquenesses, latent means
   lines.push(thrLines(t1), thrLines(t2));
   lines.push(wrapList(t1.map((it) => `${it}@1;`)));
-  lines.push(wrapList(t2.map((it) => (f.residuals ? `${it}@1;` : `${it}*;`))));
+  lines.push(wrapList(t2.map((it, p) => (f.residuals && !freeRes.has(p) ? `${it}@1;` : `${it}*;`))));
   lines.push(`[${t1r}@0];`);
   if (bifactor) lines.push('[G1@0];');
-  lines.push(f.meanFix ? `[${t2r}@0];` : `[${t2r}];`);
-  if (bifactor) lines.push(f.meanFix ? '[G2@0];' : '[G2];');
+  lines.push(...(f.meanFix ? t2MeanLines(k, f.free.means, gid) : [`[${t2r}];`, ...(bifactor ? ['[G2];'] : [])]));
   if (spec.longitudinal.correlatedUniqueness) lines.push(...pwithLines(t1, t2));
   lines.push(...outputBlock(spec));
   if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
   return lines.join('\n') + '\n';
 }
 
-/** Dispatch. */
+/** Dispatch. A trailing "@p" selects the partial-invariance branch of a chain ("inv:scalar@p", "linv:esem:strict@p"). */
 export function buildInp(spec, modelType) {
-  if (modelType.startsWith('linv:')) {
-    const [, mt, step] = modelType.split(':');
-    if (isCategoricalLongitudinal(spec)) return buildLongInvarianceCategorical(spec, ['cfa', 'besem', 'bcfa'].includes(mt) ? mt : 'esem', step);
-    if (mt === 'cfa') return buildLongInvarianceCFA(spec, step);
-    if (mt === 'bcfa') return buildLongInvarianceBifactorCfa(spec, step);
-    if (mt === 'besem') return buildLongInvarianceBifactorEsem(spec, step);
-    return buildLongInvarianceESEM(spec, step);
+  let key = modelType, variant = '';
+  const at = modelType.indexOf('@');
+  if (at >= 0) { variant = modelType.slice(at + 1); key = modelType.slice(0, at); }
+  if (key.startsWith('linv:')) {
+    const [, mt0, step] = key.split(':');
+    const mt = ['cfa', 'besem', 'bcfa'].includes(mt0) ? mt0 : 'esem';
+    return isCategoricalLongitudinal(spec) ? buildLongCategorical(spec, mt, step, variant) : buildLongContinuous(spec, mt, step, variant);
   }
-  if (modelType.startsWith('bcinv:')) return buildInvarianceCfaFamily(spec, modelType.slice(6), true);
-  if (modelType.startsWith('cinv:')) return buildInvarianceCfaFamily(spec, modelType.slice(5), false);
-  if (modelType.startsWith('binv:')) return buildInvarianceBifactorEsem(spec, modelType.slice(5));
-  if (modelType.startsWith('inv:')) return buildInvariance(spec, modelType.slice(4));
-  switch (modelType) {
+  const colon = key.indexOf(':');
+  if (colon > 0 && MG_BY_KEY[key.slice(0, colon)]) return buildMgInvariance(spec, MG_BY_KEY[key.slice(0, colon)], key.slice(colon + 1), variant);
+  switch (key) {
     case 'cfa': return buildCFA(spec);
     case 'esem': return spec.rotation.type === 'TARGET' ? buildESEMTarget(spec) : buildESEMGeomin(spec);
     case 'bifactorCfa': return buildBifactorCfa(spec);
@@ -962,55 +807,69 @@ export function buildInp(spec, modelType) {
   }
 }
 
+const MT_LABEL = { cfa: 'CFA', esem: 'ESEM', bcfa: 'Bifactor-CFA', besem: 'Bifactor-ESEM' };
+const wantedChains = (spec) => {
+  const want = [];
+  if (spec.modelTypes.cfa) want.push('cfa');
+  if (spec.modelTypes.esem) want.push('esem');
+  if (spec.modelTypes.bifactorCfa) want.push('bcfa');
+  if (spec.modelTypes.bifactorEsem) want.push('besem');
+  return want.length ? want : ['esem'];
+};
+/** One chain's steps as model entries: the full chain, or (variant 'p') the branch from its first changed step on,
+ *  skipped steps left out. `tag` prefixes the labels when several chains are present. */
+function chainModels(spec, mode, mt, variant, tag) {
+  const seq = (invHolder(spec, mode)?.sequence) || INV_SEQUENCE;
+  const br = variant === 'p' ? invBranch(spec, mode, mt) : null;
+  const start = br ? branchStart(br) : -1;
+  const thresholds = mode === 'time' ? isCategoricalLongitudinal(spec) : isCategoricalInvariance(spec);
+  const out = [];
+  seq.forEach((step, i) => {
+    if (br && (stepIdx(step) < start || br.skipped.includes(step))) return;
+    const p = br ? 'p' : '';
+    const key = mode === 'time' ? `linv:${mt}:${step}${p ? '@p' : ''}` : `${MG_CHAIN[mt].prefix}:${step}${p ? '@p' : ''}`;
+    const file = mode === 'time' ? `LongInv_${mt}_${i + 1}${p}_${step}.inp` : `${MG_CHAIN[mt].filePrefix}_${i + 1}${p}_${step}.inp`;
+    const partialHere = br?.partial[step]?.length ? ` · partial (${br.partial[step].join(', ')})` : (br ? ' · partial branch' : '');
+    out.push({ key, step, modelType: mt, variant: p, label: `${tag}${stepLabel(step, { thresholds })}${partialHere}`, file });
+  });
+  return out;
+}
+/** The partial-invariance branch of one chain (empty without a branch): the models to (re)run after a step failed. */
+export function branchModels(spec, mode, mt) {
+  if (!invBranch(spec, mode, mt).active) return [];
+  const many = wantedChains(spec).length > 1 || mt !== 'esem';
+  return chainModels(spec, mode, mt, 'p', many ? `${MT_LABEL[mt]} · ` : '');
+}
+
 /** Which models the spec asks for, in display order. */
 export function requestedModels(spec) {
-  // Longitudinal invariance: single-group ESEM and/or CFA sequence across two waves.
+  const out = [];
+  const k = spec.factors.length, rot = spec.rotation.type;
+  // Longitudinal invariance: single-group sequences across two waves for the checked measurement models,
+  // the measurement models themselves on the Time-1 indicators first (Morin's Table 1: "Time 1 only").
   if (spec.longitudinal?.enabled && spec.longitudinal.waves?.[0]?.length) {
-    const seq = spec.longitudinal.invariance.sequence || INV_SEQUENCE;
-    const MT_LABEL = { cfa: 'CFA', esem: 'ESEM', bcfa: 'Bifactor-CFA', besem: 'Bifactor-ESEM' };
-    const want = [];
-    if (spec.modelTypes.cfa) want.push('cfa');
-    if (spec.modelTypes.esem) want.push('esem');
-    if (spec.modelTypes.bifactorCfa) want.push('bcfa');
-    if (spec.modelTypes.bifactorEsem) want.push('besem');
-    if (!want.length) want.push('esem');
-    // the checked measurement models on the Time-1 indicators first (Morin's Table 1: "Time 1 only"), then the chains
     const w1 = spec.longitudinal.waveLabels?.[0] || 'Time 1';
-    const out = [];
-    if (spec.modelTypes.cfa) out.push({ key: 'cfa', label: `CFA · ${w1}`, file: `CFA_${spec.factors.length}f.inp` });
-    if (spec.modelTypes.esem) out.push({ key: 'esem', label: `ESEM (${spec.rotation.type === 'TARGET' ? 'Target' : 'Geomin'}) · ${w1}`, file: `ESEM_${spec.rotation.type.toLowerCase()}_${spec.factors.length}f.inp` });
-    if (spec.modelTypes.bifactorCfa) out.push({ key: 'bifactorCfa', label: `Bifactor-CFA · ${w1}`, file: `BifactorCFA_${spec.factors.length}s.inp` });
-    if (spec.modelTypes.bifactorEsem) out.push({ key: 'bifactorEsem', label: `Bifactor-ESEM · ${w1}`, file: `BifactorESEM_${spec.factors.length}s.inp` });
-    for (const mt of want) seq.forEach((step, i) => out.push({
-      key: `linv:${mt}:${step}`, step, modelType: mt,
-      label: `${MT_LABEL[mt]} · ${INV_META[step].label}`,
-      file: `LongInv_${mt}_${i + 1}_${step}.inp`,
-    }));
+    if (spec.modelTypes.cfa) out.push({ key: 'cfa', label: `CFA · ${w1}`, file: `CFA_${k}f.inp` });
+    if (spec.modelTypes.esem) out.push({ key: 'esem', label: `ESEM (${rot === 'TARGET' ? 'Target' : 'Geomin'}) · ${w1}`, file: `ESEM_${rot.toLowerCase()}_${k}f.inp` });
+    if (spec.modelTypes.bifactorCfa) out.push({ key: 'bifactorCfa', label: `Bifactor-CFA · ${w1}`, file: `BifactorCFA_${k}s.inp` });
+    if (spec.modelTypes.bifactorEsem) out.push({ key: 'bifactorEsem', label: `Bifactor-ESEM · ${w1}`, file: `BifactorESEM_${k}s.inp` });
+    for (const mt of wantedChains(spec)) out.push(...chainModels(spec, 'time', mt, '', `${MT_LABEL[mt]} · `), ...chainModels(spec, 'time', mt, 'p', `${MT_LABEL[mt]} · `));
     return out;
   }
   // The checked measurement models are always generated on the total sample (Morin's Table 1 reports the
   // total-group CFA/ESEM/bifactor models before the multi-group ones). With grouping on, one invariance
   // sequence follows per checked measurement model — CFA, ESEM, bifactor-CFA, bifactor-ESEM, each with
   // its own file prefix (and DIFFTEST files) so the chains can share a folder; ESEM when none is checked.
-  const out = [];
-  if (spec.modelTypes.cfa) out.push({ key: 'cfa', label: 'CFA', file: `CFA_${spec.factors.length}f.inp` });
-  if (spec.modelTypes.esem) out.push({ key: 'esem', label: `ESEM (${spec.rotation.type === 'TARGET' ? 'Target' : 'Geomin'})`, file: `ESEM_${spec.rotation.type.toLowerCase()}_${spec.factors.length}f.inp` });
-  if (spec.modelTypes.bifactorCfa) out.push({ key: 'bifactorCfa', label: 'Bifactor-CFA', file: `BifactorCFA_${spec.factors.length}s.inp` });
-  if (spec.modelTypes.bifactorEsem) out.push({ key: 'bifactorEsem', label: 'Bifactor-ESEM', file: `BifactorESEM_${spec.factors.length}s.inp` });
+  if (spec.modelTypes.cfa) out.push({ key: 'cfa', label: 'CFA', file: `CFA_${k}f.inp` });
+  if (spec.modelTypes.esem) out.push({ key: 'esem', label: `ESEM (${rot === 'TARGET' ? 'Target' : 'Geomin'})`, file: `ESEM_${rot.toLowerCase()}_${k}f.inp` });
+  if (spec.modelTypes.bifactorCfa) out.push({ key: 'bifactorCfa', label: 'Bifactor-CFA', file: `BifactorCFA_${k}s.inp` });
+  if (spec.modelTypes.bifactorEsem) out.push({ key: 'bifactorEsem', label: 'Bifactor-ESEM', file: `BifactorESEM_${k}s.inp` });
   if (spec.groups?.enabled && spec.groups.variable) {
-    const seq = spec.groups.invariance.sequence || INV_SEQUENCE;
-    const CHAINS = { cfa: ['cinv', 'CfaInv', 'CFA'], esem: ['inv', 'Inv', 'ESEM'], bcfa: ['bcinv', 'BifactorCfaInv', 'Bifactor-CFA'], besem: ['binv', 'BifactorInv', 'Bifactor-ESEM'] };
-    const want = [];
-    if (spec.modelTypes.cfa) want.push('cfa');
-    if (spec.modelTypes.esem) want.push('esem');
-    if (spec.modelTypes.bifactorCfa) want.push('bcfa');
-    if (spec.modelTypes.bifactorEsem) want.push('besem');
-    if (!want.length) want.push('esem');
+    const want = wantedChains(spec);
     for (const mt of want) {
-      const [prefix, filePrefix, name] = CHAINS[mt];
       // the ESEM chain keeps its bare step labels when it is the only chain
-      const tag = mt === 'esem' && want.length === 1 ? '' : `${name} · `;
-      seq.forEach((step, i) => out.push({ key: `${prefix}:${step}`, label: `${tag}${INV_META[step].label}`, file: `${filePrefix}_${i + 1}_${step}.inp`, step, modelType: mt }));
+      const tag = mt === 'esem' && want.length === 1 ? '' : `${MT_LABEL[mt]} · `;
+      out.push(...chainModels(spec, 'groups', mt, '', tag), ...chainModels(spec, 'groups', mt, 'p', tag));
     }
   }
   return out;
@@ -1021,4 +880,4 @@ export function maxLineLength(inp) {
   return inp.split('\n').reduce((m, l) => Math.max(m, l.length), 0);
 }
 
-export { isCategoricalInvariance, isCategoricalLongitudinal, diffTestName };
+export { isCategoricalInvariance, isCategoricalLongitudinal, diffTestName, labeledExcept };

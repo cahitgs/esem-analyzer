@@ -28,15 +28,15 @@ const chainSets = (g, longitudinal) => (longitudinal
 // Multi-group note string for the invariance table (Word + .docx).
 function mgNote(models) {
   const series = invarianceSeries(models);
-  return `N = ${models[0]?.parsed.nObs ?? '—'} across ${models[0]?.parsed.nGroups ?? 2} groups. ${invarianceGuidelineNote(series)}${unestimatedNote(series)}`;
+  return `N = ${models[0]?.parsed.nObs ?? '—'} across ${models[0]?.parsed.nGroups ?? 2} groups. ${invarianceGuidelineNote(series)}${unestimatedNote(series)}${series.some((r) => !r.retained) ? ' † Reported but not retained.' : ''}`;
 }
 
 function invRows(models) {
   const head = ['Model', 'χ²', 'df', 'CFI', 'TLI', 'RMSEA [90% CI]', 'ΔCFI', 'ΔTLI', 'ΔRMSEA'];
   // same rows as the on-screen table: sequence order, unestimated outputs marked and skipped by the comparisons,
   // a letter mark on a row whose comparison model is not the preceding step (explained in the note)
-  const body = invarianceSeries(models).map(({ m, f, dec, estimated, mark }) => (estimated
-    ? [m.label + (mark ? ` ${mark}` : ''), f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`,
+  const body = invarianceSeries(models).map(({ m, f, dec, estimated, mark, retained }) => (estimated
+    ? [m.label + (mark ? ` ${mark}` : '') + (retained ? '' : ' †'), f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`,
       dec.dcfi != null ? signed(dec.dcfi) : '—', dec.dtli != null ? signed(dec.dtli) : '—', dec.drmsea != null ? signed(dec.drmsea) : '—']
     : [m.label, 'Not estimated', ...Array(7).fill('—')]));
   return { head, body };
@@ -48,7 +48,7 @@ function invProseText(models, opts = {}) {
 // Longitudinal note string for the invariance table (Word + .docx).
 function longiNote(models, modelLabel) {
   const series = invarianceSeries(models);
-  return `N = ${models[0]?.parsed.nObs ?? '—'} across two time points${modelLabel ? ` (${modelLabel})` : ''}. ${invarianceGuidelineNote(series)}${unestimatedNote(series)}`;
+  return `N = ${models[0]?.parsed.nObs ?? '—'} across two time points${modelLabel ? ` (${modelLabel})` : ''}. ${invarianceGuidelineNote(series)}${unestimatedNote(series)}${series.some((r) => !r.retained) ? ' † Reported but not retained.' : ''}`;
 }
 
 const f2 = (x) => apaNum(x, 2, false);

@@ -83,6 +83,64 @@ function parseParamRegion(lines, start, end) {
   return out;
 }
 
+// A partial-invariance branch model's TITLE ends with a tag — "Strict (residuals) [partial strong: Z2; without
+// var-cov]" — naming the parameters freed at a step and the steps skipped before it (the generator's branchTag;
+// "partial strong: 3 freed" when the list was too long for one title line). The step text keeps its label.
+const TAG_STEP = { configural: 'configural', weak: 'metric', strong: 'scalar', strict: 'strict', 'var-cov': 'varcov', 'latent means': 'latentmean' };
+/** { invStep, invBranch: { partial: { step: [ids] }, counts: { step: n }, skipped: [steps], text } | null } */
+export function splitBranchTag(stepText) {
+  if (!stepText) return { invStep: null, invBranch: null };
+  const m = stepText.match(/^(.*?)\s*\[([^\]]*)\]\s*$/);
+  if (!m) return { invStep: stepText, invBranch: null };
+  const branch = { partial: {}, counts: {}, skipped: [], text: m[2].trim() };
+  for (const part of m[2].split(';').map((x) => x.trim()).filter(Boolean)) {
+    let mm;
+    if ((mm = part.match(/^partial\s+(.+?):\s*(.*)$/i))) {
+      const step = TAG_STEP[mm[1].trim().toLowerCase()];
+      if (!step) continue;
+      const n = mm[2].trim().match(/^(\d+)\s+freed$/i);
+      branch.partial[step] = n ? [] : mm[2].split(',').map((x) => x.trim()).filter(Boolean);
+      if (n) branch.counts[step] = Number(n[1]);
+    } else if ((mm = part.match(/^without\s+(.+)$/i))) {
+      const step = TAG_STEP[mm[1].trim().toLowerCase()];
+      if (step && !branch.skipped.includes(step)) branch.skipped.push(step);
+    }
+  }
+  return { invStep: m[1].trim(), invBranch: branch };
+}
+
+/** The MODEL MODIFICATION INDICES section: { min, entries: [{ group, kind, a, b, mi, epc, stdEpc, stdyxEpc }] } —
+ *  kind BY | ON | WITH | MEAN | VAR, where MEAN covers "[ Z2 ]" intercepts, "[ Z2$2 ]" thresholds and "[ F1 ]"
+ *  factor means, VAR the "Variances/Residual Variances" block; group = the group label of a multi-group output
+ *  (null in a single-group one). Null when the section is absent (no MODINDICES request, or a MODEL CONSTRAINT). */
+export function parseModIndices(lines) {
+  const start = findLine(lines, /^MODEL MODIFICATION INDICES\s*$/);
+  if (start < 0) return null;
+  const out = { min: null, entries: [] };
+  let group = null, section = null;
+  const tail = '((?:\\s+-?\\d+(?:\\.\\d+)?){2,4})\\s*$';
+  const reBy = new RegExp(`^\\s*(\\S+)\\s+(BY|ON|WITH)\\s+(\\S+)${tail}`);
+  const reMean = new RegExp(`^\\s*\\[\\s*(\\S+)\\s*\\]${tail}`);
+  const reVar = new RegExp(`^\\s*(\\S+)${tail}`);
+  const nums = (t) => t.trim().split(/\s+/).map(Number);
+  const push = (kind, a, b, v) => out.entries.push({ group, kind, a, b, mi: v[0], epc: v[1] ?? null, stdEpc: v[2] ?? null, stdyxEpc: v[3] ?? null });
+  for (let i = start + 1; i < lines.length; i++) {
+    const L = lines[i];
+    if (/^(TECHNICAL|RESIDUAL OUTPUT|CONFIDENCE INTERVALS|STANDARDIZED|MODEL COMMAND|CFA MODEL COMMAND|SAVEDATA|DIAGRAM|SAMPLE STATISTICS|Beginning Time|MUTHEN & MUTHEN)/.test(L)) break;
+    let m;
+    if ((m = L.match(/^Minimum M\.I\. value for printing the modification index\s+(\S+)/))) { out.min = Number(m[1]); continue; }
+    if ((m = L.match(/^Group\s+(\S+)\s*$/))) { group = m[1]; continue; }
+    if ((m = L.match(/^(BY|ON|WITH) Statements\s*$/))) { section = m[1]; continue; }
+    if (/^Means\/Intercepts\/Thresholds\s*$/.test(L)) { section = 'MEAN'; continue; }
+    if (/^Variances\/Residual Variances\s*$/.test(L)) { section = 'VAR'; continue; }
+    if (!section || !L.trim() || /^\s*M\.I\./.test(L) || /^(NOTE:|MODINDICES|No modification)/.test(L)) continue;
+    if ((m = L.match(reBy))) push(m[2], m[1], m[3], nums(m[4]));
+    else if (section === 'MEAN' && (m = L.match(reMean))) push('MEAN', m[1], null, nums(m[2]));
+    else if (section === 'VAR' && (m = L.match(reVar))) push('VAR', m[1], null, nums(m[2]));
+  }
+  return out;
+}
+
 export function parseOut(text) {
   const lines = String(text).split(/\r\n|\r|\n/);
   const res = {
@@ -130,7 +188,7 @@ export function parseOut(text) {
     res.invModel = /\(bifactor-CFA\)/i.test(res.title) ? 'bcfa' : /\(CFA\)/i.test(res.title) ? 'cfa' : /\(bifactor-ESEM\)/i.test(res.title) ? 'besem' : 'esem';
     // the separator is " - " WITH spaces — "(bifactor-ESEM)" contains a bare hyphen that must not match
     const m = res.title.match(/\s-\s(.+)$/);
-    res.invStep = m ? m[1].trim() : null; // e.g. "Metric (loadings)"
+    Object.assign(res, splitBranchTag(m ? m[1].trim() : null)); // e.g. "Weak (loadings)", a branch model's tag split off
   } else if (res.title && /^MG invariance/i.test(res.title)) {
     // App-generated multi-group titles: "MG invariance[ (categorical|CFA|bifactor-CFA|bifactor-ESEM)] - <Step>". The same
     // step capture labels every multi-group row by its step in the Results table and the Word export
@@ -138,7 +196,7 @@ export function parseOut(text) {
     res.invKind = 'multigroup';
     res.invModel = /\(bifactor-ESEM/i.test(res.title) ? 'besem' : /\(bifactor-CFA/i.test(res.title) ? 'bcfa' : /\(CFA/i.test(res.title) ? 'cfa' : 'esem';
     const m = res.title.match(/\s-\s(.+)$/);
-    res.invStep = m ? m[1].trim() : null;
+    Object.assign(res, splitBranchTag(m ? m[1].trim() : null));
   }
   let mm;
   for (const L of lines.slice(0, summaryIdx > 0 ? summaryIdx + 40 : 60)) {
@@ -260,6 +318,8 @@ export function parseOut(text) {
       res.warnings.push('No STANDARDIZED output found; loadings shown are unstandardized.');
     }
   }
+
+  res.modIndices = parseModIndices(lines);
 
   // ---- R-SQUARE → communality; δ = STDYX residual variance ----
   // (Mplus 9.1 prints a "STANDARDIZED SOLUTION" section — the rotated loadings side by side — right after R-SQUARE;

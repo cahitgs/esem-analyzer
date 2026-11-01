@@ -60,7 +60,7 @@ A few load-bearing conventions:
 - **Ordinal indicators** (one choice for every item: *Ordinal · WLSMV* on the Data page or under *Rotation & estimator*) switch the multi-group sequence to the
   **WLSMV + `PARAMETERIZATION=THETA`** thresholds chain: configural already equates every item's first
   threshold plus one referent's second threshold per factor (Millsap identification — latent means are
-  free in the non-reference groups from the start), scalar equates all thresholds, strict refixes the
+  free in the non-reference groups from the start), strong equates all thresholds, strict refixes the
   uniquenesses to 1. Each step saves derivatives via `SAVEDATA: DIFFTEST = Inv_diff_<step>.dat;` and the
   next step reads them via `ANALYSIS: DIFFTEST = …;` — **run the models in order, in one folder** (auto
   mode does this for you), so Mplus can print the difference test the Results table relies on. The
@@ -105,6 +105,29 @@ The six invariance models (men vs women) collapse into one comparison table with
 against Chen's guideline in the note:
 
 ![Measurement invariance comparison table](docs/img/07-invariance.png?v=6)
+
+### Partial invariance
+
+When a step goes beyond the fit-change guideline, the Results page adds a **Partial invariance** card under that
+chain's table (Byrne et al., 1989; Morin, 2023). The card lists the parameters the step may free — intercepts or
+thresholds at the strong step, uniquenesses at the strict step; for CFA and bifactor-CFA also loadings (weak), factor
+variances/covariances (var–cov) and latent means — sorted by the modification index the failed model reports (an ESEM
+set cannot free single loadings, variances or means; Morin, 2023; referent items of a thresholds chain stay equated).
+Pick one parameter at a time, the largest index first. The app then writes the partial model in Morin's form
+(`[X1 … Z1] (i1-i9); [Z2*]; [Z3 Z4] (i11-i12);` in every group or at both waves, T11/T34) and the later steps built
+from it as a **branch** of the chain — `Inv_3p_scalar.inp … Inv_6p_latentmean.inp`, with its own derivative files
+`Inv_diff_<step>p.dat` for WLSMV — and runs the branch in the same folder (*Run the partial model and the rest of
+the sequence*; or download the inputs). The table then shows the failed model (reported, not retained, †), the
+partial model compared with the last retained step, and the branch's later steps compared along the branch; the
+note and the draft paragraph say what was freed, why (the modification index) and what the later models are built
+from. A step that has no partial form in an ESEM set (strict, var–cov) can be left out instead (*Leave the …
+constraints out of the later steps*): the later steps are estimated without its constraints and compared with the
+last retained model. The branch is saved with the model (.json) and listed on the Syntax page after the full chain.
+
+Checked against the chapter: on Morin's Data 1 (ESEM, Z2 intercept freed) the branch reproduces Table 27.1 exactly —
+partial strong 123.025 (101), strict 135.819 (113), var–cov 157.798 (119), latent means 159.461 (122); on Data 2
+(bifactor-ESEM across time, z2 freed) 217.187 (203), 225.741 (215), 240.907 (225) and 2699.858 (229), the latent-means
+model going beyond the guideline as the chapter reports (`test/partial.test.mjs`, real Mplus 9.1.1 runs).
 
 ## 5 · ESEM-within-CFA
 

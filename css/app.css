@@ -567,3 +567,6 @@ button.pill { cursor: pointer; font-family: var(--ui); }
   .apa-table td { white-space: normal; }
   .paper-sheet .link { color: #111; }
 }
+
+/* an invariance row reported but not retained (the failed step a partial-invariance branch replaces) */
+.apa-table tr.not-retained td { color: var(--ink-2); }

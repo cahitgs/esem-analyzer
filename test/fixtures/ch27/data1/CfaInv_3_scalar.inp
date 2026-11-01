@@ -1,5 +1,5 @@
 TITLE:
-MG invariance (CFA) - Scalar (intercepts)
+MG invariance (CFA) - Strong (intercepts)
 DATA:
 FILE = "Ch27-Data1.dat";
 VARIABLE:

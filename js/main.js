@@ -1,16 +1,16 @@
 // main.js — bootstrap: owns appState, wires the 4-step flow (Data → Model → Syntax → Results).
 // Layout: settings in the left column, the manuscript (APA tables, prose, figures) on the right;
 // .inp / .out text opens in the Mplus sheet. Modelling, parsing and export engines are untouched.
-import { $, $$, el, toast, downloadText, downloadSvgAsPng } from './ui.js';
+import { $, $$, el, toast, downloadText, downloadSvgAsPng, apaNum } from './ui.js';
 import { pathDiagramSVG, conceptDiagramSVG } from './diagram.js';
 import { parseNameList, detectMissingCode, detectLikertColumns, distinctValues, parseDataFile, buildDat } from './data-parse.js';
-import { createModelSpec, looksLikeId, setDataOrdinal, setOrdinal } from './state.js';
+import { createModelSpec, looksLikeId, setDataOrdinal, setOrdinal, partialCandidates, setPartial, setSkipped, clearBranch, partialKindOf, invarianceOf, SKIPPABLE } from './state.js';
 import { mountModelBuilder, segmented } from './model-builder.js';
 import { specSignature, applySavedSpec, saveSpecLocal, loadSpecLocal } from './spec-store.js';
-import { buildInp, requestedModels } from './syntax-generator.js';
+import { buildInp, requestedModels, branchModels, invBranch, branchStart, INV_SEQUENCE, INV_META } from './syntax-generator.js';
 import { parseOut } from './out-parser.js';
 import { parseSvalues, suggestReferents, buildEwcInp, fixedCrossCount } from './ewc.js';
-import { renderFitTable, renderLoadingsTable, renderProse, renderInvarianceTable, renderInvarianceProse, sortInvarianceModels, noFitReason } from './apa-render.js';
+import { renderFitTable, renderLoadingsTable, renderProse, renderInvarianceTable, renderInvarianceProse, sortInvarianceModels, noFitReason, invarianceSeries, invStepIndex, invarianceLabel, modIndexFor, deltaText } from './apa-render.js';
 import { copyResultsToWord, exportDocx, zipInputs, buildDocxBlob, buildZipBlob } from './docx-export.js';
 import { renderAutoRunCard, autoRunActive } from './autorun-ui.js';
 import { runner } from './runner.js';
@@ -543,7 +543,7 @@ function outRowLabel(m) {
 }
 
 function deriveLabel(p, fileName) {
-  if (p.invStep) return p.invStep; // invariance step parsed from the TITLE (longitudinal or multi-group)
+  if (p.invStep) return invarianceLabel(p); // invariance step parsed from the TITLE (longitudinal or multi-group); a branch model's partial form
   const t0 = p.title || '';
   const wave = t0.match(/\[([^\]]+)\]\s*$/); // "[Time 1]" — a measurement model estimated on one wave of a longitudinal design
   const t = wave ? t0.slice(0, wave.index).trim() : t0;
@@ -635,6 +635,8 @@ function renderResultsOutput() {
     addHtml(id, `<div class="apa">${renderInvarianceTable(set, { caption: cap, longitudinal: true })}</div>`);
     const prose = renderInvarianceProse(set, { longitudinal: true });
     if (prose) addHtml(`${id}-p`, `<h3 class="ms-h3">Suggested APA text — longitudinal invariance${modelLabel ? ` (${modelLabel})` : ''}</h3>${prose}`);
+    const pc = renderPartialCard(set, { mode: 'time', mt: models[0].parsed.invModel || 'esem', label: modelLabel || 'across time', n: cardNo });
+    if (pc) { dyn?.append(pc); cardNo++; }
   };
   // Manuscript order: the four-model fit table and the loadings tables first (Table 1 is the fit table), then the
   // invariance sequences — across groups before across time. The CSS table counter follows this DOM order.
@@ -669,6 +671,8 @@ function renderResultsOutput() {
       addHtml(id, `<div class="apa">${renderInvarianceTable(models, { caption: cap })}</div>`);
       const invProse = renderInvarianceProse(models);
       if (invProse) addHtml(`${id}-p`, `<h3 class="ms-h3">Suggested APA text — invariance${modelLabel ? ` (${modelLabel})` : ''}</h3>${invProse}`);
+      const pc = renderPartialCard(models, { mode: 'groups', mt: models[0].parsed.invModel || 'esem', label: modelLabel || 'across groups', n: cardNo });
+      if (pc) { dyn?.append(pc); cardNo++; }
     };
     for (const [set, label] of sets) renderMgBlock(set, sets.length > 1 ? label : '');
   }
@@ -715,6 +719,85 @@ function renderEwcPanel(models, n) {
   render();
   return card(n, 'ESEM-within-CFA', eligible.length > 1 ? 'Freeze the retained rotated solution into an equivalent CFA.' : `Freeze the rotated solution of ${current.label} into an equivalent CFA.`, [top, holder].filter(Boolean));
 }
+// ---- Partial invariance (Byrne et al., 1989; Morin, 2023) ----
+// After a step goes beyond the fit-change guideline: free the parameters with the largest modification indices
+// (one at a time) and re-run the sequence from that partial model, or — where a step has no partial form in an
+// ESEM set — leave its constraints out of the later steps. The choices live in the spec, per chain, so the Syntax
+// page lists the branch as well; the branch runs in the same folder as the full sequence (DIFFTEST files).
+const KIND_LABEL = { loadings: 'loadings', intercepts: 'intercepts or thresholds', residuals: 'uniquenesses', varcov: 'factor variances and covariances', means: 'latent means' };
+function renderPartialCard(models, { mode, mt, label, n }) {
+  const spec = appState.spec;
+  if (!spec || !invarianceOf(spec, mode)) return null;
+  const series = invarianceSeries(models);
+  const stepKey = (m) => { const i = invStepIndex(m); return i == null ? null : INV_SEQUENCE[i]; };
+  const failedRows = series.filter((r) => r.estimated && r.dec.ok === false && !r.m.parsed?.invBranch);
+  const branch = invBranch(spec, mode, mt);
+  const steps = [...new Set([...failedRows.map((r) => stepKey(r.m)), ...Object.keys(branch.partial), ...branch.skipped])].filter(Boolean).sort((a, b) => INV_SEQUENCE.indexOf(a) - INV_SEQUENCE.indexOf(b));
+  if (!steps.length) return null;
+  let step = steps[0];
+  const holder = el('div');
+  const stepBody = () => {
+    const out = [];
+    const kind = partialKindOf(mt, step);
+    const failed = failedRows.find((r) => stepKey(r.m) === step) || null;
+    const word = INV_META[step].label;
+    out.push(el('p', { class: 'small', style: { color: 'var(--ink-2)', margin: '0' } }, failed
+      ? `The ${word} model went beyond the fit-change guideline (${deltaText(failed.dec)}).`
+      : `${word}: the branch keeps a partial form of this step.`));
+    if (kind) {
+      const cands = partialCandidates(spec, mode, mt, step);
+      const chosen = new Set(branch.partial[step] || []);
+      const rows = cands.map((c) => ({ c, mi: failed ? modIndexFor(failed.m.parsed, step, c.id) : null })).sort((a, b) => (b.mi ?? -1) - (a.mi ?? -1));
+      const list = el('div', { class: 'chips' });
+      for (const { c, mi } of rows) {
+        const chip = el('button', {
+          type: 'button', class: 'chip chip-sm mono', disabled: c.referent, 'aria-pressed': String(chosen.has(c.id)),
+          title: c.referent ? 'referent item — its second threshold identifies the latent means (Morin, 2023)' : (mi != null ? `modification index ${apaNum(mi, 1, false)}` : 'no modification index reported for this parameter'),
+        }, mi != null ? `${c.label} · ${apaNum(mi, 1, false)}` : c.label);
+        if (!c.referent) chip.onclick = () => { setPartial(spec, mode, mt, step, chosen.has(c.id) ? [...chosen].filter((x) => x !== c.id) : [...chosen, c.id]); renderResultsOutput(); };
+        list.append(chip);
+      }
+      out.push(el('p', { class: 'sub-h' }, `Free (${KIND_LABEL[kind]}) — the largest modification index first, one at a time`), list);
+      if (!failed) out.push(el('p', { class: 'hint' }, 'Modification indices come from the output of the model that failed; add it to the manuscript to see them here.'));
+    } else {
+      out.push(callout('info', `ESEM and bifactor-ESEM cannot free single ${step === 'metric' ? 'loadings' : step === 'varcov' ? 'factor variances or covariances' : 'latent means'} (Morin, 2023)${SKIPPABLE.includes(step) ? ' — skip this step instead: the later steps are then estimated without its constraints and compared with the last retained model.' : '.'}`));
+    }
+    if (SKIPPABLE.includes(step)) {
+      out.push(el('label', { class: 'toggle', style: { marginTop: '8px' } }, [
+        el('input', { type: 'checkbox', checked: branch.skipped.includes(step), onchange: (e) => { setSkipped(spec, mode, mt, step, e.target.checked); renderResultsOutput(); } }),
+        el('span', {}, `Leave the ${word} constraints out of the later steps`),
+      ]));
+    }
+    return out;
+  };
+  const body = [];
+  if (steps.length > 1) {
+    body.push(el('div', { class: 'field' }, [el('label', {}, 'Step'), el('select', { class: 'select select-sm', 'aria-label': 'Invariance step for the partial model', onchange: (e) => { step = e.target.value; holder.replaceChildren(...stepBody()); } },
+      steps.map((st) => el('option', { value: st, selected: st === step }, INV_META[st].label)))]));
+  }
+  holder.replaceChildren(...stepBody());
+  body.push(holder);
+  const bm = branchModels(spec, mode, mt);
+  if (bm.length) {
+    const have = bm.filter((m) => appState.parsed.some((x) => x.fileName === expectedOutName(m.file))).length;
+    body.push(el('p', { class: 'hint' }, `Branch: ${bm.map((m) => m.file).join(', ')} · ${have} of ${bm.length} output${bm.length === 1 ? '' : 's'} in the manuscript.`));
+    const hasData = !!(spec.data._matrix && spec.data._matrix.length);
+    // without a run folder the preceding steps go along too, so a DIFFTEST chain finds its derivative files
+    const start = branchStart(branch);
+    const lead = appState.run ? [] : requestedModels(spec).filter((m) => m.modelType === mt && !m.variant && INV_SEQUENCE.indexOf(m.step) < start);
+    const acts = [];
+    if (runner.ok() && hasData) acts.push(btn('Run the partial model and the rest of the sequence', { size: 'btn-sm', kind: 'btn-primary', icon: 'play', onclick: () => startRun([...lead, ...bm], { reuse: !!appState.run }) }));
+    acts.push(btn('Download the inputs (.zip)', { size: 'btn-sm', kind: runner.ok() && hasData ? '' : 'btn-primary', icon: 'download', onclick: () => {
+      const files = [...lead, ...bm].map((m) => ({ name: m.file, text: buildInp(spec, m.key) }));
+      if (hasData) files.push({ name: spec.data.mplusFile || 'data.dat', text: buildDat(spec.data) });
+      zipInputs(files);
+    } }));
+    acts.push(btn('Clear', { size: 'btn-sm', onclick: () => { clearBranch(spec, mode, mt); renderResultsOutput(); } }));
+    body.push(el('div', { class: 'row' }, acts));
+  }
+  return card(n, `Partial invariance — ${label}`, 'A step went beyond the guideline: free the parameters responsible and continue the sequence from the partial model (Morin, 2023).', body);
+}
+
 function ewcCardBody(m, model) {
 
   const refs = { ...suggestReferents(model) };

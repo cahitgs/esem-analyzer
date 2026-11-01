@@ -183,8 +183,8 @@ export function invStepIndex(m) {
 }
 /** The models in sequence order (unknown steps last, then by df, then input order). Input is not mutated. */
 export function sortInvarianceModels(models) {
-  return models.map((m, i) => ({ m, i, k: invStepIndex(m) ?? 99, df: m.parsed?.fit?.df ?? Number.POSITIVE_INFINITY }))
-    .sort((a, b) => (a.k - b.k) || (a.df - b.df) || (a.i - b.i))
+  return models.map((m, i) => ({ m, i, k: invStepIndex(m) ?? 99, br: m.parsed?.invBranch ? 1 : 0, df: m.parsed?.fit?.df ?? Number.POSITIVE_INFINITY }))
+    .sort((a, b) => (a.k - b.k) || (a.br - b.br) || (a.df - b.df) || (a.i - b.i))
     .map((x) => x.m);
 }
 /** Why an output carries no fit statistics (null when it has them). */
@@ -207,36 +207,126 @@ export function chiSquareFree(p) { return noFitReason(p) == null && p?.fit?.chi2
 export function noChiSquareSentence(label, f) {
   return `The ${label} model converged (log-likelihood = ${f2(f.logLik)}, AIC = ${f2(f.aic)}, BIC = ${f2(f.bic)}), but Mplus reports no χ²-based fit indices for it (as with MLR and categorical indicators), so CFI, TLI and RMSEA are not available.`;
 }
-/** Rows of an invariance table: sequence order, each model's nearest ESTIMATED predecessor and the Δ against
- *  it. A model whose .out has no fit statistics keeps its place but is marked unestimated and skipped by the
- *  comparisons, so a failed step can neither scramble the rows nor hide the configural baseline.
- *  skipped = the unestimated models between a row and its comparison model (the row then carries a letter
- *  mark, explained in the note); after = the first earlier step whose Δ went beyond the guideline (null if
- *  none) — the rows after it are reported for completeness and do not establish their level of invariance. */
+// ---- the partial-invariance branch (Byrne et al., 1989; Morin, 2023) ----
+// A branch model's TITLE tag (parsed into parsed.invBranch) says which parameters it frees and which steps it
+// leaves out. The branch replaces the full chain from its first changed step on: the full model of the step that
+// failed stays in the table as the record of the failure (reported, not retained), the full models of the later
+// steps are superseded, and every Δ is taken against the last RETAINED model.
+const STEP_KEYS = ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'];
+const STEP_WORD = { configural: 'configural', metric: 'weak', scalar: 'strong', strict: 'strict', varcov: 'latent variance–covariance', latentmean: 'latent means' };
+const KIND_WORDS = { metric: ['loading', 'loadings'], scalar: ['intercept', 'intercepts'], strict: ['uniqueness', 'uniquenesses'], varcov: ['factor variance/covariance term', 'factor variance/covariance terms'], latentmean: ['latent mean', 'latent means'] };
+export const branchOf = (m) => m?.parsed?.invBranch || null;
+const stepKeyOf = (m) => { const i = invStepIndex(m); return i == null ? null : STEP_KEYS[i]; };
+const stepPos = (key) => STEP_KEYS.indexOf(key);
+/** Human form of a freed parameter id: 'Z2' → 'Z2', 'F1:X3' → 'F1 → X3', 'F1~F2' → 'F1–F2'. */
+const idText = (id) => String(id).replace(':', ' → ').replace('~', '–');
+/** "Z2 intercept free", "Z2 and Z4 thresholds free", "3 intercepts freed" (a title tag that only kept the count). */
+export function freedText(branch, step, thresholds = false) {
+  const ids = branch.partial?.[step] || [];
+  const n = branch.counts?.[step] ?? ids.length;
+  const words = step === 'scalar' && thresholds ? ['thresholds', 'thresholds'] : KIND_WORDS[step] || ['parameter', 'parameters'];
+  if (!ids.length) return `${n} ${n === 1 ? words[0] : words[1]} freed`;
+  return `${joinList(ids.map(idText))} ${ids.length === 1 ? words[0] : words[1]} free`;
+}
+/** The row label of an invariance output: its step; the partial model of a step reads "Partial strong (Z2 intercept
+ *  free)"; the later branch models keep their step label (the note says what they are built from). */
+export function invarianceLabel(p) {
+  const step = p?.invStep || null;
+  const b = p?.invBranch;
+  if (!step || !b) return step;
+  const key = STEP_KEYS[invStepIndex({ parsed: p })] || null;
+  if (key && b.partial?.[key]) return `Partial ${STEP_WORD[key]} (${freedText(b, key, /threshold/i.test(step))})`;
+  return step;
+}
+/** The modification index a failed model reports for a parameter freed at `step` (max over groups), or null. */
+export function modIndexFor(parsed, step, id) {
+  const mi = parsed?.modIndices;
+  if (!mi?.entries?.length || !id) return null;
+  const [a, b] = step === 'metric' ? String(id).split(':') : step === 'varcov' && String(id).includes('~') ? String(id).split('~') : [String(id), null];
+  const hits = mi.entries.filter((e) => {
+    if (step === 'metric') return e.kind === 'BY' && e.a === a && e.b === b;
+    if (step === 'varcov') return b ? e.kind === 'WITH' && ((e.a === a && e.b === b) || (e.a === b && e.b === a)) : e.kind === 'VAR' && e.a === a;
+    if (step === 'strict') return e.kind === 'VAR' && e.a === a;
+    // intercepts, thresholds ("[ Z2$2 ]", or "[ PSI1_T1$ ]" when Mplus truncates the name) and latent means
+    return e.kind === 'MEAN' && (e.a === a || e.a.replace(/\$.*$/, '') === a);
+  });
+  return hits.length ? Math.max(...hits.map((e) => e.mi)) : null;
+}
+
+/** Rows of an invariance table: sequence order, each model's nearest ESTIMATED predecessor among the retained
+ *  models and the Δ against it. A model whose .out has no fit statistics keeps its place but is marked
+ *  unestimated and skipped by the comparisons, so a failed step can neither scramble the rows nor hide the
+ *  configural baseline. skipped = the unestimated models between a row and its comparison model (the row then
+ *  carries a letter mark, explained in the note); after = the first earlier retained step whose Δ went beyond
+ *  the guideline (null if none) — the rows after it are reported for completeness. With a partial-invariance
+ *  branch: retained = false on the full model of the step that failed (shown, not a comparison model), the full
+ *  models of the later steps are left out, branch = the model's branch info, partialStep = the step whose
+ *  partial model this row is. */
 export function invarianceSeries(models) {
+  const sorted = sortInvarianceModels(models);
+  const branches = sorted.filter(branchOf);
+  const partialAt = new Set(), skippedSteps = new Set();
+  let start = Infinity;
+  for (const m of branches) {
+    const b = branchOf(m);
+    for (const st of Object.keys(b.partial || {})) { partialAt.add(st); start = Math.min(start, stepPos(st)); }
+    for (const st of b.skipped || []) { skippedSteps.add(st); start = Math.min(start, stepPos(st) + 1); }
+  }
   const rows = [];
   let prev = null, skipped = [], exceeded = null, marks = 0;
-  for (const m of sortInvarianceModels(models)) {
+  for (const m of sorted) {
+    const key = stepKeyOf(m);
+    const b = branchOf(m);
+    let retained = true;
+    if (!b && key) {
+      if (partialAt.has(key) || skippedSteps.has(key)) retained = false; // the failed step, kept as the record
+      else if (stepPos(key) >= start) continue;                           // superseded by the branch
+    }
     const f = m.parsed.fit || {};
     const reason = noFitReason(m.parsed);
     const estimated = reason == null;
     const dec = estimated ? invarianceDecision(prev ? prev.parsed.fit : null, f)
       : { ok: null, text: 'Not estimated', dcfi: null, dtli: null, drmsea: null };
-    const row = { m, f, estimated, reason, prev, dec, skipped: estimated && prev ? skipped : [], after: exceeded, mark: '' };
+    const row = { m, f, estimated, reason, prev, dec, skipped: estimated && prev ? skipped : [], after: exceeded, mark: '', retained, branch: b, partialStep: b && key && b.partial?.[key] ? key : null };
     if (row.skipped.length) row.mark = String.fromCharCode(97 + marks++);
     rows.push(row);
-    if (estimated) { prev = m; skipped = []; if (dec.ok === false && !exceeded) exceeded = m; } else skipped = [...skipped, m];
+    if (estimated && retained) { prev = m; skipped = []; if (dec.ok === false && !exceeded) exceeded = m; }
+    else if (!estimated) skipped = [...skipped, m];
   }
   return rows;
 }
+/** The sentences a branch adds to a table note / the prose: what the partial models free and are compared with,
+ *  what the later models are built from, which steps were left out. html → labels escaped. */
+export function branchNote(series, { html = false } = {}) {
+  const lbl = (r) => (html ? esc(r.m.label) : r.m.label);
+  const thr = series.some((r) => /threshold/i.test(r.m.parsed?.invStep || ''));
+  const out = [];
+  for (const r of series.filter((x) => x.partialStep)) {
+    const st = r.partialStep;
+    const later = series.filter((x) => x.branch && x !== r && x.estimated && stepPos(stepKeyOf(x.m)) > stepPos(st));
+    const failed = series.find((x) => !x.retained && stepKeyOf(x.m) === st);
+    const n = (r.branch.partial[st] || []).length || r.branch.counts?.[st] || 1;
+    out.push(`The partial ${STEP_WORD[st]} model frees the ${freedText(r.branch, st, thr).replace(/ free$/, '')}${failed ? ` — the parameter${n > 1 ? 's' : ''} with the largest modification ${n > 1 ? 'indices' : 'index'} of the ${lbl(failed).toLowerCase()} model, which is reported but not retained` : ''} — and is compared with the ${r.prev ? lbl({ m: r.prev }).toLowerCase() : 'preceding'} model${later.length ? `; the ${joinList(later.map((x) => lbl(x).toLowerCase()))} model${later.length > 1 ? 's are' : ' is'} built from it` : ''} (Byrne et al., 1989; Morin, 2023).`);
+  }
+  const skippedSteps = [...new Set(series.flatMap((r) => r.branch?.skipped || []))];
+  for (const st of skippedSteps) {
+    const after = series.filter((x) => x.branch && x.estimated && x.branch.skipped.includes(st));
+    const failed = series.find((x) => !x.retained && stepKeyOf(x.m) === st);
+    if (!after.length) continue;
+    out.push(`The ${joinList(after.map((x) => lbl(x).toLowerCase()))} model${after.length > 1 ? 's are' : ' is'} estimated without the ${STEP_WORD[st]} constraints${failed ? ` (the ${lbl(failed).toLowerCase()} model is reported but not retained; its constraints have no partial form in an ESEM set)` : ''} and compared with the last retained model (Morin, 2023).`);
+  }
+  return out.join(' ');
+}
 /** Note sentences shared by the on-screen table and the Word/.docx export: how to read the Δ columns (Chen's
- *  guideline, the rows after a step that went beyond it) and the letter marks of rows whose comparison model is
- *  not the preceding step. html → labels escaped for innerHTML. */
+ *  guideline, the rows after a step that went beyond it), the branch sentences, and the letter marks of rows whose
+ *  comparison model is not the preceding step. html → labels escaped for innerHTML. */
 export function invarianceGuidelineNote(series, { html = false } = {}) {
   const lbl = (m) => (html ? esc(m.label) : m.label);
-  const beyond = series.some((r) => r.estimated && r.dec.ok === false);
-  let s = 'Models are ordered from least to most constrained; each Δ compares with the preceding estimated model. As a guideline (Chen, 2007), a decrease of more than .010 in CFI or TLI, or an increase of more than .015 in RMSEA, suggests that the constraints a step adds are not tenable'
+  const beyond = series.some((r) => r.estimated && r.retained && r.dec.ok === false);
+  let s = 'Models are ordered from least to most constrained; each Δ compares with the preceding retained model. As a guideline (Chen, 2007), a decrease of more than .010 in CFI or TLI, or an increase of more than .015 in RMSEA, suggests that the constraints a step adds are not tenable'
     + (beyond ? '; the rows after such a step are reported for completeness and do not establish those levels of invariance (Morin, 2023).' : '.');
+  const bn = branchNote(series, { html });
+  if (bn) s += ' ' + bn;
   for (const r of series.filter((x) => x.mark)) {
     s += ` ${html ? `<sup>${r.mark}</sup>` : r.mark} Compared with the ${lbl(r.prev)} model because the ${joinList(r.skipped.map(lbl))} model${r.skipped.length > 1 ? 's' : ''} could not be estimated, so the Δ covers the constraints of both steps.`;
   }
@@ -283,15 +373,16 @@ export function renderInvarianceTable(models, { caption, longitudinal = false } 
       if (d) { dchi = f2(d.chi2) + (d.p != null && d.p < 0.05 ? '*' : ''); ddf = d.df; }
       else missingDiff = true;
     } else if (prev) { const mc = (prev.df ?? 0) >= (f.df ?? 0) ? prev : f; const mu = mc === prev ? f : prev; const sb = sbChiSqDiff(mc, mu); if (sb) { dchi = f2(sb.TRd) + (sb.p < 0.05 ? '*' : ''); ddf = sb.df; } }
-    const cells = [esc(m.label) + (r.mark ? `<sup>${r.mark}</sup>` : ''), f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`,
+    const cells = [esc(m.label) + (r.mark ? `<sup>${r.mark}</sup>` : '') + (r.retained ? '' : '<sup>†</sup>'), f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`,
       dchi, ddf, dec.dcfi != null ? signed(dec.dcfi, 3) : '—', dec.dtli != null ? signed(dec.dtli, 3) : '—', dec.drmsea != null ? signed(dec.drmsea, 3) : '—'];
-    rows += `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
+    rows += `<tr${r.retained ? '' : ' class="not-retained"'}>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
   }
   const across = longitudinal ? 'across two time points' : `across ${models[0]?.parsed.nGroups ?? 2} groups`;
   const dchiNote = wlsmv
     ? `Δχ² = WLSMV difference test (Mplus DIFFTEST) against the preceding model; WLSMV χ² values cannot be differenced directly.${missingDiff ? ' Missing Δχ² values: run the generated models in order, in one folder, so each step finds the previous step’s DIFFTEST file.' : ''}`
     : 'Δχ²(s) = Satorra–Bentler scaled difference.';
-  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} ${across}. ${invarianceGuidelineNote(series, { html: true })} ${dchiNote}${unestimatedNote(series, { html: true })} * <i>p</i> &lt; .05.</p>`;
+  const dagger = series.some((r) => !r.retained) ? ' † Reported but not retained.' : '';
+  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} ${across}. ${invarianceGuidelineNote(series, { html: true })} ${dchiNote}${unestimatedNote(series, { html: true })}${dagger} * <i>p</i> &lt; .05.</p>`;
   return `<table class="apa-table"><caption><b>Table.</b> ${caption}</caption><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${note}`;
 }
 
@@ -302,25 +393,57 @@ export function invarianceProseText(models, { longitudinal = false } = {}) {
   const skipped = series.filter((r) => !r.estimated);
   const over = longitudinal ? 'across the two time points' : 'across groups';
   const lower = (r) => r.m.label.toLowerCase();
+  const thr = series.some((r) => /threshold/i.test(r.m.parsed?.invStep || ''));
   const skippedSentence = skipped.length
     ? ` The ${joinList(skipped.map(lower))} model${skipped.length > 1 ? 's' : ''} could not be estimated (${joinList([...new Set(skipped.map((r) => r.reason))])}) and ${skipped.length > 1 ? 'were' : 'was'} left out of the comparisons.`
     : '';
   if (est.length < 2) return skippedSentence.trim();
   // the comparison model, named when it is not the preceding step
   const against = (r) => (r.skipped.length ? `, against the ${r.prev.label.toLowerCase()} model because the ${joinList(r.skipped.map((x) => x.label.toLowerCase()))} model${r.skipped.length > 1 ? 's' : ''} could not be estimated` : '');
-  const beyond = est.findIndex((r, i) => i > 0 && r.dec.ok === false);
-  const within = est.slice(1, beyond < 0 ? est.length : beyond);
-  let s = `${est[0].m.label} invariance provided a baseline against which more constrained models were compared. `;
-  if (within.length) {
+  const guideline = 'Chen’s (2007) guideline of a decrease of no more than .010 in CFI and TLI and an increase of no more than .015 in RMSEA';
+  let s = `${est[0].m.label} invariance provided a baseline against which more constrained models were compared.`;
+  let within = [], afterPartial = null, said = false, broke = false;
+  const flush = () => {
+    if (!within.length) return;
     const held = joinList(within.map(lower));
-    s += `The ${held} model${within.length > 1 ? 's' : ''} stayed within Chen’s (2007) guideline of a decrease of no more than .010 in CFI and TLI and an increase of no more than .015 in RMSEA (${within.map((r) => `${lower(r)}: ${deltaText(r.dec)}${against(r)}`).join('; ')}), which is consistent with ${beyond < 0 ? 'full measurement invariance' : `${held} invariance`} ${over}.`;
+    s += ` The ${held} model${within.length > 1 ? 's' : ''}${afterPartial ? `, built from the ${afterPartial} model,` : ''} stayed within ${said ? 'the' : guideline} ${said ? 'guideline' : ''}`.replace(/\s+$/, '')
+      + ` (${within.map((r) => `${lower(r)}: ${deltaText(r.dec)}${against(r)}`).join('; ')}), which is consistent with ${broke || afterPartial ? `${held} invariance` : 'full measurement invariance'} ${over}.`;
+    said = true; within = [];
+  };
+  for (let i = 1; i < est.length; i++) {
+    const r = est[i];
+    if (!r.retained) {
+      // the step that failed: its partial model (next row at the same step) or the skip that follows
+      flush();
+      const st = stepKeyOf(r.m);
+      s += ` The ${lower(r)} model went beyond ${said ? 'the guideline' : guideline} (${deltaText(r.dec)}${against(r)}).`;
+      said = true;
+      const partial = est.find((x) => x.partialStep === st);
+      if (partial) {
+        const id = partial.branch.partial[st]?.[0];
+        const mi = modIndexFor(r.m.parsed, st, id);
+        s += ` The modification indices pointed to the ${freedText(partial.branch, st, thr).replace(/ free$/, '')}${mi != null ? ` (MI = ${apaNum(mi, 1, false)})` : ''}; with ${(partial.branch.partial[st] || []).length === 1 ? 'its' : 'their'} equality constraint${(partial.branch.partial[st] || []).length === 1 ? '' : 's'} removed, the ${lower(partial)} model ${partial.dec.ok === false ? `still went beyond the guideline (${deltaText(partial.dec)}), so further parameters should be freed one at a time before the sequence continues` : `stayed within the guideline relative to the ${partial.prev ? partial.prev.label.toLowerCase() : 'preceding'} model (${deltaText(partial.dec)}), which is consistent with partial ${STEP_WORD[st]} invariance`} (Byrne et al., 1989; Morin, 2023).`;
+        afterPartial = `partial ${STEP_WORD[st]}`;
+        i = est.indexOf(partial); // the partial row is told; continue after it
+        if (partial.dec.ok === false) broke = true;
+      } else if (est.some((x) => x.branch?.skipped?.includes(st))) {
+        s += ` These constraints have no partial form in an ESEM set (Morin, 2023), so the following models were estimated without them and compared with the last retained model.`;
+        afterPartial = afterPartial || null;
+      }
+      continue;
+    }
+    if (r.partialStep && !est.some((x) => !x.retained && stepKeyOf(x.m) === r.partialStep)) { within.push(r); continue; } // partial row without its failed model present
+    if (r.dec.ok === false) {
+      flush();
+      s += ` The ${lower(r)} model went beyond ${said ? 'the guideline' : guideline} (${deltaText(r.dec)}${against(r)}), so ${lower(r)} invariance should not be accepted as it stands; a partial-invariance model that frees the parameters with the largest modification indices should be examined before the sequence continues (Morin, 2023).`;
+      said = true; broke = true;
+      const rest = est.slice(i + 1).filter((x) => x.retained);
+      if (rest.length) s += ` The ${joinList(rest.map(lower))} model${rest.length > 1 ? 's' : ''} of the full sequence ${rest.length > 1 ? 'are' : 'is'} reported in the table for completeness: each was compared with the model before it and does not establish that level of invariance.`;
+      break;
+    }
+    within.push(r);
   }
-  if (beyond >= 0) {
-    const r = est[beyond];
-    s += `${within.length ? ' ' : ''}The ${lower(r)} model went beyond that guideline (${deltaText(r.dec)}${against(r)}), so ${lower(r)} invariance should not be accepted as it stands; a partial-invariance model that frees the parameters with the largest modification indices should be examined before the sequence continues (Morin, 2023).`;
-    const rest = est.slice(beyond + 1);
-    if (rest.length) s += ` The ${joinList(rest.map(lower))} model${rest.length > 1 ? 's' : ''} of the full sequence ${rest.length > 1 ? 'are' : 'is'} reported in the table for completeness: each was compared with the model before it and does not establish that level of invariance.`;
-  }
+  flush();
   return s + skippedSentence;
 }
 export function renderInvarianceProse(models, opts = {}) {

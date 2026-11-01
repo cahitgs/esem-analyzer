@@ -1,5 +1,5 @@
 TITLE:
-Longitudinal invariance - Metric (loadings)
+Longitudinal invariance - Weak (loadings)
 DATA:
 FILE = "Ch27-Data2.dat";
 VARIABLE:

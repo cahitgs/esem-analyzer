@@ -1,5 +1,5 @@
 TITLE:
-Longitudinal invariance - Scalar (intercepts)
+Longitudinal invariance - Strong (intercepts)
 DATA:
 FILE = "Ch27-Data2.dat";
 VARIABLE:

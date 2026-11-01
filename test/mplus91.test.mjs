@@ -28,6 +28,7 @@ function diffs(x, y, path = 'p', out = []) {
     return out;
   }
   for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) {
+    if (k === 'modIndices') continue; // Mplus 9.1.1 prints a slightly different set of modification indices
     if (!(k in x) || !(k in y)) { out.push(`${path}.${k}: ${k in x ? 'missing in 9.1.1 parse' : 'only in 9.1.1 parse'}`); continue; }
     diffs(x[k], y[k], `${path}.${k}`, out);
   }

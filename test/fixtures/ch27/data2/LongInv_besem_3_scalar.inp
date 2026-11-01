@@ -1,5 +1,5 @@
 TITLE:
-Longitudinal invariance (bifactor-ESEM) - Scalar (intercepts)
+Longitudinal invariance (bifactor-ESEM) - Strong (intercepts)
 DATA:
 FILE = "Ch27-Data2.dat";
 VARIABLE:

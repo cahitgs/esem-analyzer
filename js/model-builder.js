@@ -236,7 +236,8 @@ function renderGroups() {
     const on = seqHolder.sequence.includes(step);
     seqBox.append(el('button', { type: 'button', class: 'chip chip-sm', 'aria-pressed': on ? 'true' : 'false', onclick: () => { toggleStep(seqHolder, step, !on); updatePreview(); renderGroups(); } }, INV_META[step].label));
   }
-  host.append(el('p', { class: 'sub-h' }, 'Invariance steps (in order)'), seqBox);
+  host.append(el('p', { class: 'sub-h' }, 'Invariance steps (in order)'), seqBox,
+    el('p', { class: 'hint' }, 'If a step goes beyond the fit-change guideline, the Results page offers a partial model: free the parameters with the largest modification indices, one at a time, and continue the sequence from there (Morin, 2023).'));
   renderResponseCategories(host);
 
   const banner = mode === 'time'

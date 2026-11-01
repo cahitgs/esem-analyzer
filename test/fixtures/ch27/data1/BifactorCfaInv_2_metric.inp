@@ -1,5 +1,5 @@
 TITLE:
-MG invariance (bifactor-CFA) - Metric (loadings)
+MG invariance (bifactor-CFA) - Weak (loadings)
 DATA:
 FILE = "Ch27-Data1.dat";
 VARIABLE:

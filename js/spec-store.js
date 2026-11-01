@@ -2,7 +2,7 @@
 // keeps the sketch across a return to the Data step, remembers it per data file in localStorage, and
 // exports / imports it as a .json file, so an 18-item / 6-factor sketch survives a closed tab or moves to
 // another file with the same columns. Pure: no DOM, node-testable.
-import { setItems, setFactorCount } from './state.js';
+import { setItems, setFactorCount, sanitizeBranches } from './state.js';
 
 export const SPEC_FORMAT = 1;
 
@@ -66,6 +66,7 @@ export function applySavedSpec(spec, saved, { withData = false } = {}) {
     spec.longitudinal = { ...spec.longitudinal, ...L, invariance: { ...spec.longitudinal.invariance, ...(L.invariance || {}) } };
     if (spec.longitudinal.enabled && spec.longitudinal.waves[0].length >= 2) setItems(spec, spec.longitudinal.waves[0].slice()); // Time-1 columns are the item set
   }
+  sanitizeBranches(spec); // partial-invariance branches: only parameters the chains can free
   spec.recode = {};
   if (saved.recode && typeof saved.recode === 'object') for (const [col, m] of Object.entries(saved.recode)) if (names.has(col) && m && typeof m === 'object') spec.recode[col] = { ...m };
   if (withData && spec.data) {

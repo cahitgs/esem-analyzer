@@ -1,5 +1,5 @@
 TITLE:
-Longitudinal invariance (bifactor-ESEM) - Metric (loadings)
+Longitudinal invariance (bifactor-ESEM) - Weak (loadings)
 DATA:
 FILE = "Ch27-Data2.dat";
 VARIABLE:

@@ -1,5 +1,5 @@
 TITLE:
-Longitudinal invariance (bifactor-CFA) - Metric (loadings)
+Longitudinal invariance (bifactor-CFA) - Weak (loadings)
 DATA:
 FILE = "Ch27-Data2.dat";
 VARIABLE:

@@ -19,7 +19,8 @@ export function createModelSpec(data) {
     estimator: 'MLR',
     modelTypes: { cfa: true, esem: true, bifactorCfa: false, bifactorEsem: false },
     bifactor: { gLabel: 'G' },
-    groups: { enabled: false, variable: null, codes: [], invariance: { sequence: ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'] } },
+    // invariance.partial / .skipped hold the partial-invariance branch per model family — see partialCandidates
+    groups: { enabled: false, variable: null, codes: [], invariance: { sequence: ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'], partial: {}, skipped: {} } },
     // Longitudinal (within-person, 2-wave) invariance: single group, two ESEM/CFA blocks sharing one
     // factor pattern. waves[0]=Time 1 columns drive the Λ grid (= spec.items); waves[1]=Time 2 columns
     // are positionally matched (waves[1][k] is the same indicator as waves[0][k], measured again).
@@ -28,7 +29,7 @@ export function createModelSpec(data) {
       waveLabels: ['Time 1', 'Time 2'],
       waves: [[], []],
       correlatedUniqueness: true, // emit "T1items PWITH T2items" (same indicator's residual across waves)
-      invariance: { sequence: ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'] },
+      invariance: { sequence: ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'], partial: {}, skipped: {} },
     },
     output: { line: DEFAULT_OUTPUT_LINE },
     // Convergence aids (Morin, Hoyle Handbook ch. 27): loosened convergence criterion (his T32
@@ -104,6 +105,112 @@ export function setOrdinal(spec, on) {
   spec.estimator = on ? 'WLSMV' : 'MLR';
   if (on && spec.aids) spec.aids.positiveResiduals = []; // residual variances are not free parameters under the categorical model
   return spec;
+}
+
+// ---- Partial invariance (Byrne et al., 1989; Morin, 2023) ----
+// When a step of an invariance sequence goes beyond the fit-change guideline, the researcher frees the parameters
+// responsible (the largest modification indices, one at a time) and continues the sequence from that partial
+// model; a step without a partial form can be skipped (its constraints left out of the later steps). The branch of
+// each chain is kept per mode ('groups' | 'time') and model family (cfa | esem | bcfa | besem):
+//   invariance.partial[mt][step] = [ids]      invariance.skipped[mt] = [steps]
+// ids: an item (its intercept / thresholds / residual variance), 'F1:X3' or 'G:X3' a loading (CFA families),
+// 'F1~F2' a factor covariance, 'F2' or 'G' a factor variance (var–cov step) or a factor mean (latent-means step).
+const PARTIAL_STEP_KIND = { metric: 'loadings', scalar: 'intercepts', strict: 'residuals', varcov: 'varcov', latentmean: 'means' };
+export const SKIPPABLE = ['strict', 'varcov'];
+/** CFA and bifactor-CFA may free parameters at every step after configural; ESEM and bifactor-ESEM only at the
+ *  strong and strict steps — the loadings, variances, covariances and means of a rotated set cannot be freed one
+ *  at a time (Morin, 2023). Returns the kind of parameter, or null. */
+export function partialKindOf(mt, step) {
+  if (step === 'scalar' || step === 'strict') return PARTIAL_STEP_KIND[step];
+  return (mt === 'cfa' || mt === 'bcfa') && PARTIAL_STEP_KIND[step] ? PARTIAL_STEP_KIND[step] : null;
+}
+export const invarianceOf = (spec, mode) => (mode === 'time' ? spec.longitudinal?.invariance : spec.groups?.invariance);
+/** The parameters a step may free for one chain: [{ id, label, kind, referent }] (referent items of a thresholds chain
+ *  cannot be freed — their second threshold identifies the latent means — and are listed disabled). */
+export function partialCandidates(spec, mode, mt, step) {
+  const kind = partialKindOf(mt, step);
+  if (!kind) return [];
+  const time = mode === 'time';
+  const items = time ? (spec.longitudinal?.waves?.[0] || []) : spec.items;
+  const ordinal = items.length > 0 && items.every((it) => (spec.data?.categorical || []).includes(it));
+  const bifactor = mt === 'besem' || mt === 'bcfa';
+  const ids = factorIds(spec), all = bifactor ? ['G', ...ids] : ids;
+  const fLabel = (id) => (id === 'G' ? (spec.bifactor?.gLabel || 'G') : (spec.factors.find((f) => f.id === id)?.label || id));
+  const pair = (it) => (time ? `${it} / ${waveCounterpart(spec, it) || '?'}` : it);
+  if (kind === 'intercepts') {
+    const refs = ordinal ? thresholdReferents(spec, thresholdCounts(spec, items), { general: bifactor }).refs : new Set();
+    return items.map((it) => ({ id: it, label: pair(it), kind: ordinal ? 'thresholds' : 'intercept', referent: refs.has(it) }));
+  }
+  if (kind === 'residuals') return items.map((it) => ({ id: it, label: pair(it), kind: 'residual', referent: false }));
+  if (kind === 'loadings') {
+    const out = [];
+    if (bifactor) for (const it of items) out.push({ id: `G:${it}`, label: `${fLabel('G')} → ${pair(it)}`, kind: 'loading', referent: false });
+    for (const f of spec.factors) for (const it of mainItemsForFactor(spec, f.id)) out.push({ id: `${f.id}:${it}`, label: `${fLabel(f.id)} → ${pair(it)}`, kind: 'loading', referent: false });
+    return out;
+  }
+  if (kind === 'varcov') {
+    const out = all.map((id) => ({ id, label: `var(${fLabel(id)})`, kind: 'variance', referent: false }));
+    if (mt !== 'bcfa') for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) out.push({ id: `${all[i]}~${all[j]}`, label: `cov(${fLabel(all[i])}, ${fLabel(all[j])})`, kind: 'covariance', referent: false });
+    return out;
+  }
+  return all.map((id) => ({ id, label: `mean(${fLabel(id)})`, kind: 'mean', referent: false }));
+}
+/** Set the parameters freed at one step of a chain (an empty list removes the step from the branch). */
+export function setPartial(spec, mode, mt, step, ids) {
+  const inv = invarianceOf(spec, mode);
+  if (!inv) return spec;
+  inv.partial = inv.partial || {};
+  inv.partial[mt] = inv.partial[mt] || {};
+  const valid = new Set(partialCandidates(spec, mode, mt, step).filter((c) => !c.referent).map((c) => c.id));
+  const keep = [...new Set(ids || [])].filter((id) => valid.has(id));
+  if (keep.length) inv.partial[mt][step] = keep; else delete inv.partial[mt][step];
+  if (!Object.keys(inv.partial[mt]).length) delete inv.partial[mt];
+  return spec;
+}
+/** Skip a step's constraints in the later steps of a chain (strict or var–cov only). */
+export function setSkipped(spec, mode, mt, step, on) {
+  const inv = invarianceOf(spec, mode);
+  if (!inv || !SKIPPABLE.includes(step)) return spec;
+  inv.skipped = inv.skipped || {};
+  const cur = (inv.skipped[mt] || []).filter((s) => s !== step);
+  if (on) cur.push(step);
+  if (cur.length) inv.skipped[mt] = cur; else delete inv.skipped[mt];
+  return spec;
+}
+export function clearBranch(spec, mode, mt) {
+  const inv = invarianceOf(spec, mode);
+  if (!inv) return spec;
+  if (inv.partial) delete inv.partial[mt];
+  if (inv.skipped) delete inv.skipped[mt];
+  return spec;
+}
+/** Drop branch entries that no longer fit the spec (items or factors gone, an edited .json): called after a
+ *  restore and before validation. Returns the ids dropped. */
+export function sanitizeBranches(spec) {
+  const dropped = [];
+  for (const mode of ['groups', 'time']) {
+    const inv = invarianceOf(spec, mode);
+    if (!inv) continue;
+    if (inv.partial && typeof inv.partial === 'object') {
+      for (const [mt, steps] of Object.entries(inv.partial)) {
+        if (!steps || typeof steps !== 'object') { delete inv.partial[mt]; continue; }
+        for (const [step, ids] of Object.entries(steps)) {
+          const valid = new Set(partialCandidates(spec, mode, mt, step).filter((c) => !c.referent).map((c) => c.id));
+          const keep = (Array.isArray(ids) ? ids : []).filter((id) => valid.has(id));
+          for (const id of (Array.isArray(ids) ? ids : [])) if (!valid.has(id)) dropped.push(id);
+          if (keep.length) steps[step] = keep; else delete steps[step];
+        }
+        if (!Object.keys(steps).length) delete inv.partial[mt];
+      }
+    } else inv.partial = {};
+    if (inv.skipped && typeof inv.skipped === 'object') {
+      for (const [mt, steps] of Object.entries(inv.skipped)) {
+        const keep = (Array.isArray(steps) ? steps : []).filter((s) => SKIPPABLE.includes(s));
+        if (keep.length) inv.skipped[mt] = keep; else delete inv.skipped[mt];
+      }
+    } else inv.skipped = {};
+  }
+  return dropped;
 }
 
 export function setFactorCount(spec, k) {
@@ -607,6 +714,19 @@ export function validateSpec(spec) {
   }
   if (spec.aids?.positiveResiduals?.some((it) => spec.data.categorical.includes(it))) {
     warnings.push('Residual-variance constraints are skipped for categorical items — their residual variance is not a free parameter under the default (DELTA) parameterization.');
+  }
+
+  // partial-invariance branch: ids must name parameters the step can free (a freed referent would leave the
+  // latent means unidentified; ESEM sets cannot free single loadings, variances or means)
+  for (const mode of ['groups', 'time']) {
+    const inv = invarianceOf(spec, mode);
+    if (!inv?.partial) continue;
+    for (const [mt, steps] of Object.entries(inv.partial)) for (const [step, ids] of Object.entries(steps || {})) {
+      if (!partialKindOf(mt, step)) { errors.push(`Partial invariance: the ${step} step of the ${mt.toUpperCase()} chain has no partial form (ESEM sets cannot free single loadings, variances or means); skip the step instead.`); continue; }
+      const cands = partialCandidates(spec, mode, mt, step);
+      const bad = (ids || []).filter((id) => !cands.some((c) => c.id === id && !c.referent));
+      if (bad.length) errors.push(`Partial invariance (${mt.toUpperCase()} chain, ${step} step): ${bad.join(', ')} cannot be freed — not a parameter of that step${cands.some((c) => c.referent && bad.includes(c.id)) ? ', or a referent item whose second threshold identifies the latent means' : ''}.`);
+    }
   }
 
   const sparse = sparseCategories(spec);

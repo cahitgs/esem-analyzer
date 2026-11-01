@@ -1,5 +1,5 @@
 TITLE:
-MG invariance (bifactor-ESEM) - Metric (loadings)
+MG invariance (bifactor-ESEM) - Weak (loadings)
 DATA:
 FILE = "Ch27-Data1.dat";
 VARIABLE:
