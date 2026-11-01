@@ -85,7 +85,7 @@ The app itself is a static site, but `serve.mjs` is also the local Mplus runner,
 ```bash
 node serve.mjs            # → http://localhost:3001 — also detects Mplus and runs models from the app
 node serve.mjs --open     # same, and opens the browser
-PORT=3400 node serve.mjs  # another port;  MPLUS_PATH=... if Mplus.exe is not under Program Files
+PORT=3400 node serve.mjs  # another port;  MPLUS_PATH=... if Mplus.exe is not in a Program Files\Mplus* folder (every such folder is probed, the newest version wins)
 
 # any static server works too (no local runs; download / drop .out instead)
 python -m http.server 8000
@@ -115,6 +115,9 @@ localhost (CORS for the GitHub Pages origin; `ALLOW_ORIGINS` adds others), so th
 
 The engines are unit-tested against **real Mplus `.out` fixtures**, and the generated syntax has been run
 back through Mplus 8.3 to confirm it reproduces the intended models (matching degrees of freedom and fit).
+The same inputs were re-run in **Mplus 9.1.1** (November 2026): every converged model parses to the same values,
+and the sections Mplus 9.1 added (the side-by-side `STANDARDIZED SOLUTION`, the moved `QUALITY OF NUMERICAL
+RESULTS`, the new wording for a model without a χ²) are covered by `test/mplus91.test.mjs`.
 
 ```bash
 node test/parser.test.mjs       # .out parser             (68)
@@ -131,6 +134,7 @@ node test/mginv.test.mjs        # MG bifactor-ESEM invariance + Mplus-legal grou
 node test/catinv.test.mjs       # categorical WLSMV invariance + DIFFTEST, ESEM + bifactor-ESEM chains, one indicator type for every item (126)
 node test/invorder.test.mjs     # invariance step order, unestimated outputs (MG + longitudinal), total-sample models, ID columns, Time-2 pairing incl. an 18 000-file name sweep, Mplus input errors, invariance tables without a verdict column (142)
 node test/examples.test.mjs     # the article’s two example data sets: presets regenerate the article’s 56 inputs byte for byte (20)
+node test/mplus91.test.mjs      # Mplus 9.1.1 outputs parse like the 8.3 outputs of the same inputs (side-by-side section, DIFFTEST, no-χ² wording) (34)
 ```
 
 The two multi-group invariance engines were additionally **cross-validated against De Beer & Morin's

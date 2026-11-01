@@ -97,7 +97,7 @@ export function parseOut(text) {
   res.converged = /THE MODEL ESTIMATION TERMINATED NORMALLY/.test(text);
   res.hasError = /(DID NOT TERMINATE NORMALLY|NO CONVERGENCE|PROBLEM OCCURRED|fatal error)/i.test(text);
   res.seComputed = !/STANDARD ERRORS OF THE MODEL PARAMETER ESTIMATES COULD NOT BE\s+COMPUTED/i.test(text);
-  res.chiSquareComputed = !/CHI-SQUARE COULD NOT BE COMPUTED/i.test(text);
+  res.chiSquareComputed = !/CHI-SQUARE COULD NOT BE COMPUTED|CHI-SQUARE STATISTIC IS NEGATIVE/i.test(text);
   if (!res.seComputed) res.warnings.push('Standard errors could not be computed — the model may not be identified.');
   if (!res.chiSquareComputed) res.warnings.push('Robust χ² and fit indices could not be computed for this model.');
   if (/NOT POSITIVE DEFINITE/i.test(text)) res.warnings.push('A covariance matrix was not positive definite — inspect the solution.');
@@ -214,6 +214,12 @@ export function parseOut(text) {
     const wi = findLine(lines, /^WRMR \(Weighted Root Mean/, fitStart);
     if (wi >= 0) for (let j = wi + 1; j < wi + 4 && j < lines.length; j++) if (/^\s*Value\s/.test(lines[j])) { fit.wrmr = num(lines[j]); break; }
   }
+  // Mplus 9.1 leaves the chi-square block out (or prints "THE CHI-SQUARE STATISTIC IS NEGATIVE") where 8.x said
+  // "THE ROBUST CHI-SQUARE COULD NOT BE COMPUTED": a converged model without a χ² value gets the same flag and note.
+  if (res.converged && res.chiSquareComputed && fit.chi2 == null) {
+    res.chiSquareComputed = false;
+    res.warnings.push('Robust χ² and fit indices could not be computed for this model.');
+  }
 
   // ---- standardized (STDYX) parameter block ----
   const stdyxIdx = findLine(lines, /^STDYX Standardization\s*$/);
@@ -235,7 +241,7 @@ export function parseOut(text) {
     // No-SE degraded form: a single "STANDARDIZED MODEL RESULTS" block with
     // StdYX/StdY/Std estimate columns and no "STDYX Standardization" sub-header.
     const sIdx = findLine(lines, /^STANDARDIZED MODEL RESULTS\s*$/);
-    let end = findLine(lines, /^(R-SQUARE|QUALITY OF NUMERICAL|MODEL MODIFICATION|TECHNICAL|CONFIDENCE INTERVALS|RESIDUAL OUTPUT)/, sIdx + 1);
+    let end = findLine(lines, /^(R-SQUARE|STANDARDIZED SOLUTION|QUALITY OF NUMERICAL|MODEL MODIFICATION|TECHNICAL|CONFIDENCE INTERVALS|RESIDUAL OUTPUT)/, sIdx + 1);
     if (end < 0) end = lines.length;
     const blk = parseParamRegion(lines, sIdx + 1, end);
     res.loadings = blk.loadings; res.factorOrder = blk.factorOrder; res.items = blk.items;
@@ -256,9 +262,11 @@ export function parseOut(text) {
   }
 
   // ---- R-SQUARE → communality; δ = STDYX residual variance ----
+  // (Mplus 9.1 prints a "STANDARDIZED SOLUTION" section — the rotated loadings side by side — right after R-SQUARE;
+  //  its rows look like R-SQUARE rows, so the scan must stop there.)
   const rsIdx = findLine(lines, /^R-SQUARE\s*$/);
   if (rsIdx >= 0) {
-    const end = findLine(lines, /^(QUALITY OF NUMERICAL|CONFIDENCE INTERVALS|MODEL MODIFICATION|TECHNICAL|RESIDUAL OUTPUT|DIAGRAM)/, rsIdx + 1);
+    const end = findLine(lines, /^(STANDARDIZED SOLUTION|QUALITY OF NUMERICAL|CONFIDENCE INTERVALS|MODEL MODIFICATION|TECHNICAL|RESIDUAL OUTPUT|DIAGRAM)/, rsIdx + 1);
     for (let i = rsIdx + 1; i < (end < 0 ? lines.length : end); i++) {
       const row = dataRow(lines[i]);
       if (row && res.items.includes(row.name)) res.rSquare[row.name] = row.est;

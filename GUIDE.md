@@ -2,7 +2,7 @@
 
 This guide goes through the whole workflow with the bundled [`example-dataset/`](example-dataset/): build
 the syntax, run it in your own Mplus, and turn the output into APA tables, prose, and diagrams — including
-**ESEM-within-CFA**. Every syntax pattern below has been run back through Mplus 8.3 to confirm it reproduces
+**ESEM-within-CFA**. Every syntax pattern below has been run back through Mplus 8.3 (and re-run in Mplus 9.1.1) to confirm it reproduces
 the intended model.
 
 **Try it live:** <https://cahitgs.github.io/esem-analyzer/> · or `node serve.mjs` locally.

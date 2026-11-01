@@ -42,8 +42,14 @@ function candidatePaths() {
   const list = [];
   if (process.env.MPLUS_PATH) list.push(process.env.MPLUS_PATH);
   if (process.platform === 'win32') {
-    for (const base of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], 'C:\\Program Files', 'C:\\Program Files (x86)']) {
-      if (base) list.push(path.join(base, 'Mplus', 'Mplus.exe'));
+    const bases = [...new Set([process.env.ProgramFiles, process.env['ProgramFiles(x86)'], 'C:\\Program Files', 'C:\\Program Files (x86)'].filter(Boolean))];
+    for (const base of bases) {
+      // every "Mplus*" folder: Mplus 9 and later can sit beside an older "Mplus" folder; the Demo comes last
+      let dirs = [];
+      try { dirs = fss.readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory() && /^mplus/i.test(d.name)).map((d) => d.name); } catch { /* no such folder */ }
+      dirs.sort((a, b) => (/demo/i.test(a) - /demo/i.test(b)) || a.localeCompare(b));
+      for (const d of dirs) list.push(path.join(base, d, 'Mplus.exe'));
+      list.push(path.join(base, 'Mplus', 'Mplus.exe'));
     }
   } else {
     list.push('/Applications/Mplus/mplus', '/opt/mplus/mplus', '/usr/local/bin/mplus');
@@ -51,22 +57,38 @@ function candidatePaths() {
   return [...new Set(list)];
 }
 
-async function detectMplus() {
-  for (const p of candidatePaths()) if (fss.existsSync(p)) { mplus.path = p; break; }
-  if (!mplus.path) { mplus.error = 'Mplus was not found. Set the path to Mplus.exe with the MPLUS_PATH environment variable.'; mplus.checked = true; return; }
-  // a tiny probe model confirms the licence and reads the version from its output
+// a tiny probe model confirms the licence and reads the version from its output; null when Mplus could not be run
+async function probeVersion(exe) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'simple-structure-'));
   try {
     await fs.writeFile(path.join(dir, 'p.dat'), '1 2\n2 1\n3 4\n4 3\n5 5\n');
     await fs.writeFile(path.join(dir, 'p.inp'), 'TITLE: probe;\nDATA: FILE = p.dat;\nVARIABLE: NAMES = a b;\nANALYSIS: TYPE = BASIC;\n');
-    await new Promise((resolve) => execFile(mplus.path, ['p.inp', 'p.out'], { cwd: dir, timeout: 30000, windowsHide: true }, () => resolve()));
+    await new Promise((resolve) => execFile(exe, ['p.inp', 'p.out'], { cwd: dir, timeout: 30000, windowsHide: true }, () => resolve()));
     const out = await fs.readFile(path.join(dir, 'p.out'), 'utf8').catch(() => '');
     const m = out.match(/Mplus VERSION ([\d.]+)( DEMO)?/);
-    if (m) { mplus.version = m[1] + (m[2] ? ' (DEMO)' : ''); mplus.ok = true; }
-    else mplus.error = 'Mplus could not be run (possibly a licence or installation problem).';
+    return m ? m[1] + (m[2] ? ' (DEMO)' : '') : null;
+  } finally {
+    fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// "9.1.1" > "8.3"; a DEMO ranks below every full version
+const versionKey = (v) => (/\(DEMO\)/.test(v) ? [-1] : String(v).split('.').map((x) => parseInt(x, 10) || 0));
+const compareVersions = (a, b) => { const ka = versionKey(a), kb = versionKey(b); for (let i = 0; i < Math.max(ka.length, kb.length); i++) { const d = (ka[i] || 0) - (kb[i] || 0); if (d) return d; } return 0; };
+
+async function detectMplus() {
+  const found = candidatePaths().filter((p) => fss.existsSync(p));
+  if (!found.length) { mplus.error = 'Mplus was not found. Set the path to Mplus.exe with the MPLUS_PATH environment variable.'; mplus.checked = true; return; }
+  try {
+    // MPLUS_PATH is taken as given; otherwise every installed copy is probed and the newest full version wins
+    const pick = process.env.MPLUS_PATH && found[0] === process.env.MPLUS_PATH ? [found[0]] : found;
+    for (const exe of pick) {
+      const v = await probeVersion(exe);
+      if (v && (!mplus.ok || compareVersions(v, mplus.version) > 0)) { mplus.path = exe; mplus.version = v; mplus.ok = true; }
+    }
+    if (!mplus.ok) { mplus.path = pick[0]; mplus.error = 'Mplus could not be run (possibly a licence or installation problem).'; }
   } finally {
     mplus.checked = true;
-    fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
