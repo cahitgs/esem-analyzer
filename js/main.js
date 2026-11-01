@@ -750,7 +750,7 @@ function renderPartialCard(models, { mode, mt, label, n }) {
     if (kind) {
       const cands = partialCandidates(spec, mode, mt, step);
       const chosen = new Set(branch.partial[step] || []);
-      const rows = cands.map((c) => ({ c, mi: failed ? modIndexFor(failed.m.parsed, step, c.id) : null })).sort((a, b) => (b.mi ?? -1) - (a.mi ?? -1));
+      const rows = cands.map((c) => ({ c, mi: failed ? modIndexFor(failed.m.parsed, step, c.pair ? `${c.id}/${c.pair}` : c.id) : null })).sort((a, b) => (b.mi ?? -1) - (a.mi ?? -1));
       const list = el('div', { class: 'chips' });
       for (const { c, mi } of rows) {
         const chip = el('button', {

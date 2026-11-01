@@ -139,9 +139,9 @@ export function partialCandidates(spec, mode, mt, step) {
   const pair = (it) => (time ? `${it} / ${waveCounterpart(spec, it) || '?'}` : it);
   if (kind === 'intercepts') {
     const refs = ordinal ? thresholdReferents(spec, thresholdCounts(spec, items), { general: bifactor }).refs : new Set();
-    return items.map((it) => ({ id: it, label: pair(it), kind: ordinal ? 'thresholds' : 'intercept', referent: refs.has(it) }));
+    return items.map((it) => ({ id: it, label: pair(it), pair: time ? waveCounterpart(spec, it) : null, kind: ordinal ? 'thresholds' : 'intercept', referent: refs.has(it) }));
   }
-  if (kind === 'residuals') return items.map((it) => ({ id: it, label: pair(it), kind: 'residual', referent: false }));
+  if (kind === 'residuals') return items.map((it) => ({ id: it, label: pair(it), pair: time ? waveCounterpart(spec, it) : null, kind: 'residual', referent: false }));
   if (kind === 'loadings') {
     const out = [];
     if (bifactor) for (const it of items) out.push({ id: `G:${it}`, label: `${fLabel('G')} → ${pair(it)}`, kind: 'loading', referent: false });

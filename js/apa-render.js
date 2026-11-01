@@ -242,13 +242,18 @@ export function invarianceLabel(p) {
 export function modIndexFor(parsed, step, id) {
   const mi = parsed?.modIndices;
   if (!mi?.entries?.length || !id) return null;
-  const [a, b] = step === 'metric' ? String(id).split(':') : step === 'varcov' && String(id).includes('~') ? String(id).split('~') : [String(id), null];
+  // Mplus prints variable names in upper case; a longitudinal pair ("z2_t1/z2_t2", "F1:x3_t1/x3_t2") takes the larger index
+  const U = (x) => String(x || '').toUpperCase();
+  const [head, tail] = String(id).includes(':') ? String(id).split(':') : [null, String(id)];
+  const names = tail.split('/').map(U);
   const hits = mi.entries.filter((e) => {
-    if (step === 'metric') return e.kind === 'BY' && e.a === a && e.b === b;
-    if (step === 'varcov') return b ? e.kind === 'WITH' && ((e.a === a && e.b === b) || (e.a === b && e.b === a)) : e.kind === 'VAR' && e.a === a;
-    if (step === 'strict') return e.kind === 'VAR' && e.a === a;
+    if (step === 'metric') return e.kind === 'BY' && names.includes(U(e.b)) && (names.length > 1 || U(e.a) === U(head));
+    if (step === 'varcov') return names.length === 1 && String(id).includes('~')
+      ? e.kind === 'WITH' && ((U(e.a) === U(id.split('~')[0]) && U(e.b) === U(id.split('~')[1])) || (U(e.a) === U(id.split('~')[1]) && U(e.b) === U(id.split('~')[0])))
+      : e.kind === 'VAR' && names.includes(U(e.a));
+    if (step === 'strict') return e.kind === 'VAR' && names.includes(U(e.a));
     // intercepts, thresholds ("[ Z2$2 ]", or "[ PSI1_T1$ ]" when Mplus truncates the name) and latent means
-    return e.kind === 'MEAN' && (e.a === a || e.a.replace(/\$.*$/, '') === a);
+    return e.kind === 'MEAN' && (names.includes(U(e.a)) || names.includes(U(e.a).replace(/\$.*$/, '')));
   });
   return hits.length ? Math.max(...hits.map((e) => e.mi)) : null;
 }

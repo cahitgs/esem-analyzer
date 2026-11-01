@@ -355,9 +355,9 @@ function stepPlan(spec, mode, mt, step, variant) {
   };
 }
 /** " [partial strong: Z2; without var-cov]" — the TITLE tag the parser reads back (ASCII; counts when long). */
-function branchTag(plan, maxLen = 44) {
+function branchTag(plan, maxLen = 44, pairName = (id) => id) {
   if (!plan.branch) return '';
-  const names = (s) => [...plan.free[PARTIAL_KIND[s]]].join(', ');
+  const names = (s) => [...plan.free[PARTIAL_KIND[s]]].map(pairName).join(', ');
   const parts = [...plan.partialSteps.map((s) => `partial ${INV_META[s].tag}: ${names(s)}`), ...plan.skipped.map((s) => `without ${INV_META[s].tag}`)];
   if (!parts.length) return '';
   let tag = parts.join('; ');
@@ -585,6 +585,17 @@ function longPlan(spec, mt, step, variant) {
   const p = stepPlan(spec, 'time', mt, step, variant);
   return { ...p, equate: p.loadings, meanFix: p.means };
 }
+// a freed pair is named with both waves in the title tag — "z2_t1/z2_t2", "F1:x3_t1/x3_t2" — so the tables and the
+// modification-index lookup see both names; factor ids (variances, means) stay as they are
+function longPairName(spec) {
+  return (id) => {
+    const m = String(id).match(/^([^:]+:)?(.+)$/);
+    const item = m[2], pre = m[1] || '';
+    const t2 = waveCounterpart(spec, item);
+    return t2 ? `${pre}${item}/${t2}` : id;
+  };
+}
+const longTag = (spec, f) => branchTag(f, 44, longPairName(spec));
 // Time-2 factor variances refixed @1 (freed ones stay *) and Time-2 means refixed @0 (freed ones stay free).
 function t2VarLines(k, free, gid = null, gFirst = false) {
   const t2r = longRanges(k).t2;
@@ -662,7 +673,7 @@ function buildLongContinuous(spec, mt, step, variant) {
   const bifactor = mt === 'besem' || mt === 'bcfa';
   const gid = bifactor ? 'G' : null;
   const flag = (w) => `(*${w}${f.equate ? ' 1' : ''})`;
-  const lines = [...titleLine(`${LONG_TITLE[mt]} - ${stepLabel(step)}${branchTag(f)}`), ...headerBlocks(spec, { ...LONG_HEADER[mt], useVars: [...t1, ...t2] }), 'MODEL:'];
+  const lines = [...titleLine(`${LONG_TITLE[mt]} - ${stepLabel(step)}${longTag(spec, f)}`), ...headerBlocks(spec, { ...LONG_HEADER[mt], useVars: [...t1, ...t2] }), 'MODEL:'];
   // measurement blocks
   if (mt === 'esem') {
     lines.push(...(spec.rotation.type === 'TARGET'
@@ -742,7 +753,7 @@ function buildLongCategorical(spec, mt, step, variant) {
   const { difftestIn, difftestOut } = diffTestLinks(spec, 'time', mt, step, variant, seq, `LongInv_${mt}`);
   const header = { ...LONG_HEADER[mt], parameterization: 'THETA', difftestIn, useVars: [...t1, ...t2] };
   if (mt === 'cfa') header.iterations = 10000;
-  const lines = [...titleLine(`${LONG_TITLE[mt]} - ${stepLabel(step, { thresholds: true })}${branchTag(f)}`), ...headerBlocks(spec, header), 'MODEL:'];
+  const lines = [...titleLine(`${LONG_TITLE[mt]} - ${stepLabel(step, { thresholds: true })}${longTag(spec, f)}`), ...headerBlocks(spec, header), 'MODEL:'];
   // measurement blocks — the same forms as the continuous builders
   if (mt === 'esem') {
     lines.push(stmt([`${t1r} BY`, ...t1, flag('t1')]), stmt([`${t2r} BY`, ...t2, flag('t2')]));

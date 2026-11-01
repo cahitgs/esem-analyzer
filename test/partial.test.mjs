@@ -155,7 +155,8 @@ section('longitudinal chains: the pair freed at both waves (Morin T34), CFA load
   setPartial(spec, 'time', 'besem', 'scalar', ['z2_t1']);
   const p = buildInp(spec, 'linv:besem:scalar@p');
   ok('bifactor-ESEM partial strong: z2 free at both waves between the labelled runs', / z1_t1\] \(i1-i9\);\n\[z2_t1\*\];\n\[z3_t1 z4_t1\] \(i11-i12\);/.test(p) && / z1_t2\] \(i1-i9\);\n\[z2_t2\*\];\n\[z3_t2 z4_t2\] \(i11-i12\);/.test(p), p);
-  ok('title tag on a longitudinal title', /Longitudinal invariance \(bifactor-ESEM\) - Strong \(intercepts\) \[partial strong: z2_t1\]/.test(p));
+  ok('title tag on a longitudinal title names both waves of the pair', /Longitudinal invariance \(bifactor-ESEM\) - Strong \(intercepts\) \[partial strong: z2_t1\/z2_t2\]/.test(p), p.split('\n')[1]);
+  ok('modIndexFor is case-insensitive and takes the larger index of a pair', modIndexFor({ modIndices: { entries: [{ kind: 'MEAN', a: 'Z2_T1', mi: 183.4 }, { kind: 'MEAN', a: 'Z2_T2', mi: 617.7 }] } }, 'scalar', 'z2_t1/z2_t2') === 617.7 && modIndexFor({ modIndices: { entries: [{ kind: 'MEAN', a: 'Z2', mi: 5 }] } }, 'scalar', 'z2') === 5);
   const lm = buildInp(spec, 'linv:besem:latentmean@p');
   ok('latent means@p keeps z2 free, refixes the Time-2 means (G2 included)', (lm.match(/\[z2_t[12]\*\];/g) || []).length === 2 && /\[F4-F6@0\];\n\[G2@0\];/.test(lm));
   const bm = branchModels(spec, 'time', 'besem');
