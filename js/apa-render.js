@@ -364,7 +364,7 @@ export function renderInvarianceTable(models, { caption, longitudinal = false } 
   const head = ['Model', 'χ²', 'df', 'CFI', 'TLI', 'RMSEA [90% CI]', wlsmv ? 'Δχ²' : 'Δχ²(s)', 'Δdf', 'ΔCFI', 'ΔTLI', 'ΔRMSEA'];
   const series = invarianceSeries(models);
   let rows = '';
-  let missingDiff = false;
+  let missingDiff = false, constrainedDiff = false;
   for (const r of series) {
     const { m, f, dec } = r;
     if (!r.estimated) {
@@ -377,6 +377,7 @@ export function renderInvarianceTable(models, { caption, longitudinal = false } 
     if (prev && wlsmv) {
       const d = m.parsed.diffTest;
       if (d) { dchi = f2(d.chi2) + (d.p != null && d.p < 0.05 ? '*' : ''); ddf = d.df; }
+      else if (m.parsed.modelConstraint || r.prev.parsed.modelConstraint) constrainedDiff = true; // no DIFFTEST with MODEL CONSTRAINT
       else missingDiff = true;
     } else if (prev) { const mc = (prev.df ?? 0) >= (f.df ?? 0) ? prev : f; const mu = mc === prev ? f : prev; const sb = sbChiSqDiff(mc, mu); if (sb) { dchi = f2(sb.TRd) + (sb.p < 0.05 ? '*' : ''); ddf = sb.df; } }
     const cells = [esc(m.label) + (r.mark ? `<sup>${r.mark}</sup>` : '') + (r.retained ? '' : '<sup>†</sup>'), f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`,
@@ -385,7 +386,7 @@ export function renderInvarianceTable(models, { caption, longitudinal = false } 
   }
   const across = longitudinal ? 'across two time points' : `across ${models[0]?.parsed.nGroups ?? 2} groups`;
   const dchiNote = wlsmv
-    ? `Δχ² = WLSMV difference test (Mplus DIFFTEST) against the preceding model; WLSMV χ² values cannot be differenced directly.${missingDiff ? ' Missing Δχ² values: run the generated models in order, in one folder, so each step finds the previous step’s DIFFTEST file.' : ''}`
+    ? `Δχ² = WLSMV difference test (Mplus DIFFTEST) against the preceding model; WLSMV χ² values cannot be differenced directly.${constrainedDiff ? ' Δχ² is not available for a model estimated with MODEL CONSTRAINT (the residual-variance aid), nor for the step after it: Mplus does not combine DIFFTEST with MODEL CONSTRAINT.' : ''}${missingDiff ? ' Missing Δχ² values: run the generated models in order, in one folder, so each step finds the previous step’s DIFFTEST file.' : ''}`
     : 'Δχ²(s) = Satorra–Bentler scaled difference.';
   const dagger = series.some((r) => !r.retained) ? ' † Reported but not retained.' : '';
   const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} ${across}. ${invarianceGuidelineNote(series, { html: true })} ${dchiNote}${unestimatedNote(series, { html: true })}${dagger} * <i>p</i> &lt; .05.</p>`;

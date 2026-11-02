@@ -6,7 +6,7 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { buildInp, requestedModels, maxLineLength, INV_SEQUENCE } from '../js/syntax-generator.js';
+import { buildInp, requestedModels, maxLineLength, INV_SEQUENCE, FILE_STEP } from '../js/syntax-generator.js';
 import { createModelSpec, setItems, setFactorCount, mplusLabel, groupLabels } from '../js/state.js';
 import { parseOut } from '../js/out-parser.js';
 
@@ -30,7 +30,7 @@ spec.groups = { enabled: true, variable: 'gender', codes: [{ code: 1, label: 'me
 // ---- requestedModels wiring ----
 const models = requestedModels(spec);
 ok('groups on + cfa, esem, besem checked → 3 total-sample models + 6 cinv + 6 inv + 6 binv = 21', models.length === 21 && models.slice(0, 3).map((m) => m.key).join() === 'cfa,esem,bifactorEsem' && models.filter((m) => m.key.startsWith('cinv:')).length === 6, models.map((m) => m.key));
-ok('binv files named BifactorInv_N_step', models.filter((m) => m.key.startsWith('binv:')).every((m, i) => m.file === `BifactorInv_${i + 1}_${INV_SEQUENCE[i]}.inp`), models.map((m) => m.file));
+ok('binv files named BifactorInv_N_step', models.filter((m) => m.key.startsWith('binv:')).every((m, i) => m.file === `BifactorInv_${i + 1}_${FILE_STEP[INV_SEQUENCE[i]]}.inp`), models.map((m) => m.file));
 const specNoB = { ...spec, modelTypes: { ...spec.modelTypes, bifactorEsem: false } };
 ok('besem unchecked → cfa + esem + 6 cinv + 6 inv = 14 models', requestedModels(specNoB).length === 14, requestedModels(specNoB).length);
 
@@ -85,7 +85,7 @@ console.log('\n— CFA and bifactor-CFA multi-group chains (cinv:/bcinv:) —');
   const ms = requestedModels(four);
   ok('all four checked → 4 total-sample models + 4 chains × 6 = 28', ms.length === 28 && ['cinv', 'inv', 'bcinv', 'binv'].every((p) => ms.filter((m) => m.key.startsWith(p + ':')).length === 6), ms.map((m) => m.key));
   ok('chains follow the model order: CFA, ESEM, bifactor-CFA, bifactor-ESEM', ms.slice(4).map((m) => m.key.split(':')[0]).join() === ['cinv', 'inv', 'bcinv', 'binv'].flatMap((p) => Array(6).fill(p)).join());
-  ok('files CfaInv_N_step / BifactorCfaInv_N_step', ms.filter((m) => m.key.startsWith('cinv:')).every((m, i) => m.file === `CfaInv_${i + 1}_${INV_SEQUENCE[i]}.inp`) && ms.filter((m) => m.key.startsWith('bcinv:')).every((m, i) => m.file === `BifactorCfaInv_${i + 1}_${INV_SEQUENCE[i]}.inp`), ms.map((m) => m.file));
+  ok('files CfaInv_N_step / BifactorCfaInv_N_step', ms.filter((m) => m.key.startsWith('cinv:')).every((m, i) => m.file === `CfaInv_${i + 1}_${FILE_STEP[INV_SEQUENCE[i]]}.inp`) && ms.filter((m) => m.key.startsWith('bcinv:')).every((m, i) => m.file === `BifactorCfaInv_${i + 1}_${FILE_STEP[INV_SEQUENCE[i]]}.inp`), ms.map((m) => m.file));
   ok('labels name the model when several chains exist (ESEM included); modelType set', ms.filter((m) => m.step).every((m) => /^(CFA|ESEM|Bifactor-CFA|Bifactor-ESEM) · /.test(m.label) && ['cfa', 'esem', 'bcfa', 'besem'].includes(m.modelType)), ms.filter((m) => m.step).map((m) => m.label));
   const esemOnly = requestedModels({ ...spec, modelTypes: { cfa: false, esem: true, bifactorCfa: false, bifactorEsem: false } });
   ok('ESEM alone keeps the bare step labels', esemOnly.length === 7 && esemOnly.slice(1).every((m) => m.key.startsWith('inv:') && !/ · /.test(m.label)), esemOnly.map((m) => m.label));

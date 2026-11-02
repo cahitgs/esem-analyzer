@@ -118,5 +118,8 @@ console.log('\n— CFA / bifactor-CFA chain titles —');
   check('"Longitudinal invariance (bifactor-CFA) - …" → longitudinal / bcfa', c.invKind === 'longitudinal' && c.invModel === 'bcfa' && c.invStep === 'Metric (loadings)', [c.invKind, c.invModel, c.invStep]);
 }
 
+check('MODEL CONSTRAINT in the echoed input is flagged (the repaired Data 1 bifactor-ESEM)', parseOut(fx('besem_target_data1.out')).modelConstraint === true, null);
+check('no MODEL CONSTRAINT → flag false', p.modelConstraint === false, p.modelConstraint);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

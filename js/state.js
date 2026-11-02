@@ -103,7 +103,6 @@ export function setDataOrdinal(data, on) {
 export function setOrdinal(spec, on) {
   setDataOrdinal(spec.data, on);
   spec.estimator = on ? 'WLSMV' : 'MLR';
-  if (on && spec.aids) spec.aids.positiveResiduals = []; // residual variances are not free parameters under the categorical model
   return spec;
 }
 
@@ -712,11 +711,10 @@ export function validateSpec(spec) {
     }
   }
 
-  if (spec.aids?.positiveResiduals?.length && (spec.groups.enabled || spec.longitudinal?.enabled)) {
-    warnings.push('Residual-variance constraints (res > 0) apply to single-group measurement models only — invariance sequences are generated without them.');
-  }
   if (spec.aids?.positiveResiduals?.some((it) => spec.data.categorical.includes(it))) {
-    warnings.push('Residual-variance constraints are skipped for categorical items — their residual variance is not a free parameter under the default (DELTA) parameterization.');
+    warnings.push((spec.groups.enabled || spec.longitudinal?.enabled)
+      ? 'Residual-variance constraints on ordinal items apply in the invariance sequences only, where the residual variance is a free parameter — the non-reference groups or Time 2, before the strict step; the single-group measurement models (DELTA parameterization) have no such parameter.'
+      : 'Residual-variance constraints are skipped for ordinal items in the single-group measurement models — their residual variance is not a free parameter under the default (DELTA) parameterization.');
   }
 
   // partial-invariance branch: ids must name parameters the step can free (a freed referent would leave the

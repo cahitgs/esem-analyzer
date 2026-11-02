@@ -65,7 +65,7 @@ ok('configural: all lines ≤ 90 chars', maxLineLength(conf) <= 90, maxLineLengt
 // ---- chain + per-step constraints ----
 const met = buildInp(spec, 'inv:metric');
 ok('metric: reads configural derivatives', /DIFFTEST = Inv_diff_configural.dat;\nMODEL:/.test(met.replace(/ANALYSIS:[\s\S]*?(DIFFTEST)/, '$1')) || (/DIFFTEST = Inv_diff_configural.dat;/.test(met.split('MODEL:')[0])));
-ok('metric: saves own derivatives', /DIFFTEST = Inv_diff_metric.dat;/.test(met.split('SAVEDATA:')[1] || ''));
+ok('metric: saves own derivatives', /DIFFTEST = Inv_diff_weak.dat;/.test(met.split('SAVEDATA:')[1] || ''));
 ok('metric: group block has NO BY lines', (met.match(/F1 BY /g) || []).length === 1);
 ok('metric: group variances freed', /MODEL okulB:[\s\S]*F1\*; F2\*; F3\*;/.test(met));
 ok('metric: thresholds still partial', /\[duy2_t1\$2\];/.test(met));
@@ -85,7 +85,7 @@ const lm = buildInp(spec, 'inv:latentmean');
 ok('latentmean: G2 means refixed @0', /MODEL okulB:[\s\S]*\[F1-F3@0\];/.test(lm));
 ok('latentmean: LAST step saves no derivatives', !/SAVEDATA:/.test(lm));
 ok('latentmean: reads varcov derivatives', /DIFFTEST = Inv_diff_varcov.dat;/.test(lm));
-ok('diffTestName helper', diffTestName('metric') === 'Inv_diff_metric.dat');
+ok('diffTestName helper', diffTestName('metric') === 'Inv_diff_weak.dat');
 for (const s of INV_SEQUENCE) ok(`${s}: all lines ≤ 90 chars`, maxLineLength(buildInp(spec, `inv:${s}`)) <= 90);
 
 // ---- bifactor-ESEM categorical chain (Morin T15/T42: one more second threshold, the G referent) ----
@@ -110,7 +110,7 @@ ok('bvc: 6 covariance labels (G pairs included) × 2 groups; group 2 variances r
 const blm = buildInp(spec, 'binv:latentmean');
 ok('blm: group 2 means refixed @0; no SAVEDATA; reads varcov derivatives', /MODEL okulB:[\s\S]*\[G@0\]; \[F1-F3@0\];/.test(blm) && !/SAVEDATA:/.test(blm) && /DIFFTEST = BifactorInv_diff_varcov.dat;/.test(blm));
 ok('bifactor chain never touches the ESEM chain\'s Inv_diff files', ![bconf, bmet, bsca, bstr, bvc, blm].some((t) => /[^r]Inv_diff_/.test(t)));
-ok('diffTestName prefix', diffTestName('metric', 'BifactorInv') === 'BifactorInv_diff_metric.dat' && diffTestName('metric') === 'Inv_diff_metric.dat');
+ok('diffTestName prefix', diffTestName('metric', 'BifactorInv') === 'BifactorInv_diff_weak.dat' && diffTestName('metric') === 'Inv_diff_weak.dat');
 for (const s of INV_SEQUENCE) ok(`binv:${s}: all lines ≤ 90 chars`, maxLineLength(buildInp(spec, `binv:${s}`)) <= 90, maxLineLength(buildInp(spec, `binv:${s}`)));
 
 // ---- real Mplus fixtures (identical to De Beer & Morin's categorical generator, 6/6) ----
@@ -182,8 +182,8 @@ console.log('\n— partial sequence / 3 groups / OUTPUT / renderers —');
 {
   const part = { ...spec, groups: { ...spec.groups, invariance: { sequence: ['configural', 'scalar', 'latentmean'] } } };
   const ps = buildInp(part, 'binv:scalar'), pl = buildInp(part, 'binv:latentmean');
-  ok('partial sequence: scalar reads the configural derivatives and saves its own', /DIFFTEST = BifactorInv_diff_configural.dat;/.test(ps.split('MODEL:')[0]) && /SAVEDATA:\nDIFFTEST = BifactorInv_diff_scalar.dat;/.test(ps));
-  ok('partial sequence: latentmean reads the scalar derivatives, saves none', /DIFFTEST = BifactorInv_diff_scalar.dat;/.test(pl.split('MODEL:')[0]) && !/SAVEDATA:/.test(pl));
+  ok('partial sequence: scalar reads the configural derivatives and saves its own', /DIFFTEST = BifactorInv_diff_configural.dat;/.test(ps.split('MODEL:')[0]) && /SAVEDATA:\nDIFFTEST = BifactorInv_diff_strong.dat;/.test(ps));
+  ok('partial sequence: latentmean reads the scalar derivatives, saves none', /DIFFTEST = BifactorInv_diff_strong.dat;/.test(pl.split('MODEL:')[0]) && !/SAVEDATA:/.test(pl));
   const three = { ...spec, groups: { ...spec.groups, codes: [{ code: 1, label: 'okulA' }, { code: 2, label: 'okulB' }, { code: 3, label: 'okulC' }] } };
   const tc = buildInp(three, 'binv:configural');
   ok('three groups: two group sections, each with the bifactor block and free uniquenesses', (tc.match(/^MODEL okul[BC]:/gm) || []).length === 2 && (tc.match(/^G BY /gm) || []).length === 3 && (tc.match(/^duy1_t1\*;/gm) || []).length === 2);
@@ -214,6 +214,12 @@ ok('table: latentmean Δχ²=76.43* (p<.05 star)', /<td>76.43\*<\/td><td>3<\/td>
   const h2 = renderInvarianceTable(broken);
   ok('table: broken chain → dash + run-in-order note', /Missing Δχ² values/.test(h2));
 }
+{
+  // the residual-variance aid: a constrained model (and the step after it) has no DIFFTEST by design — the note says why
+  const aided = parsedFx.map((m, i) => (i === 1 ? { ...m, parsed: { ...m.parsed, modelConstraint: true, diffTest: null } } : i === 2 ? { ...m, parsed: { ...m.parsed, diffTest: null } } : m));
+  const h3 = renderInvarianceTable(aided);
+  ok('table: Δχ² missing because of MODEL CONSTRAINT → the note explains it instead of the run-in-order advice', /does not combine DIFFTEST with MODEL CONSTRAINT/.test(h3) && !/Missing Δχ² values/.test(h3));
+}
 
 {
   // MLR + an all-categorical item set + grouping: the THETA/DIFFTEST chain is refused (Mplus rejects THETA under MLR)
@@ -237,7 +243,7 @@ console.log('\n— categorical CFA / bifactor-CFA chains (cinv:/bcinv:, WLSMV/TH
   ok('cfa + bcfa checked → 2 total-sample models + 6 cinv + 6 bcinv', ms.length === 14 && ms.filter((m) => m.key.startsWith('cinv:')).length === 6 && ms.filter((m) => m.key.startsWith('bcinv:')).length === 6, ms.map((m) => m.key));
   const cc = buildInp(spec, 'cinv:configural'), cm = buildInp(spec, 'cinv:metric'), cs = buildInp(spec, 'cinv:scalar'), cl = buildInp(spec, 'cinv:latentmean');
   ok('cinv configural: THETA, no rotation, first + referent thresholds labelled, group means free, uniquenesses @1 / free', /PARAMETERIZATION = THETA;/.test(cc) && !/ROTATION/.test(cc) && /\[duy1_t1\$1\] \(t1\);/.test(cc) && /\[duy1_t1\$2\] \(t2\);/.test(cc) && /\[F1\*\]; \[F2\*\]; \[F3\*\];/.test(cc) && /duy1_t1@1;/.test(cc) && /duy1_t1\*;/.test(cc), cc);
-  ok('cinv: DIFFTEST handshake with its own CfaInv_diff_* files', !/DIFFTEST/.test(cc.split('OUTPUT')[0]) && /SAVEDATA:\nDIFFTEST = CfaInv_diff_configural.dat;/.test(cc) && /DIFFTEST = CfaInv_diff_configural.dat;/.test(cm.split('MODEL:')[0]) && /SAVEDATA:\nDIFFTEST = CfaInv_diff_metric.dat;/.test(cm) && !/SAVEDATA/.test(cl), [cm.split('MODEL:')[0]]);
+  ok('cinv: DIFFTEST handshake with its own CfaInv_diff_* files', !/DIFFTEST/.test(cc.split('OUTPUT')[0]) && /SAVEDATA:\nDIFFTEST = CfaInv_diff_configural.dat;/.test(cc) && /DIFFTEST = CfaInv_diff_configural.dat;/.test(cm.split('MODEL:')[0]) && /SAVEDATA:\nDIFFTEST = CfaInv_diff_weak.dat;/.test(cm) && !/SAVEDATA/.test(cl), [cm.split('MODEL:')[0]]);
   ok('cinv scalar: every threshold labelled', /\[duy1_t1\$3\] \(t3\);/.test(cs) && /\[duy1_t1\$4\] \(t4\);/.test(cs), cs);
   const bc = buildInp(spec, 'bcinv:configural'), bm = buildInp(spec, 'bcinv:metric');
   ok('bcinv configural: G on all items, orthogonal, THETA, one more (G) referent second threshold', /G BY duy1_t1\* duy2_t1/.test(bc) && /G WITH F1@0 F2@0 F3@0;/.test(bc) && /PARAMETERIZATION = THETA;/.test(bc) && (bc.split('MODEL okulB:')[0].match(/\$2\] \(t\d+\);/g) || []).length === 4 && (cc.split('MODEL okulB:')[0].match(/\$2\] \(t\d+\);/g) || []).length === 3, bc);
@@ -277,7 +283,7 @@ console.log('\n— one choice for every item: all continuous (MLR, intercepts) o
   ok('setOrdinal(false): no column flagged, estimator MLR, the intercept chains apply (no CATEGORICAL, no THETA)', s.data.ordinal === false && s.data.categorical.length === 0 && s.estimator === 'MLR' && !/CATEGORICAL/.test(buildInp(s, 'esem')) && !/THETA/.test(buildInp(s, 'cinv:configural')) && /\] \(i\d/.test(buildInp(s, 'cinv:scalar')));
   ok('…residual-variance aids survive the switch to continuous', s.aids.positiveResiduals.join() === 'm1');
   setOrdinal(s, true);
-  ok('switching to ordinal drops the residual-variance aids (not free parameters under the categorical model)', s.aids.positiveResiduals.length === 0);
+  ok('switching to ordinal keeps the residual-variance aids (they apply in the chains: group 2 / Time 2 before the strict step)', s.aids.positiveResiduals.length > 0);
   for (const k of ['cinv', 'inv', 'bcinv', 'binv']) ok(`ordinal ${k}: all steps ≤ 90 chars/line`, INV_SEQUENCE.every((stp) => maxLineLength(buildInp(s, `${k}:${stp}`)) <= 90));
 }
 {

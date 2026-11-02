@@ -25,7 +25,7 @@ const stripAids = (t) => t.split('\n').filter((l) => !AID_LINE.test(l.trim())).j
 const SETS = {
   data1: { file: 'Ch27-Data1.dat', preset: 'data1-model.json', rows: 10000, cols: 13, aided: ['BifactorESEM_3s.inp'],
     names: ['X1', 'X2', 'X3', 'X4', 'Y1', 'Y2', 'Y3', 'Y4', 'Z1', 'Z2', 'Z3', 'Z4', 'GROUP'] },
-  data2: { file: 'Ch27-Data2.dat', preset: 'data2-model.json', rows: 10000, cols: 24, aided: ['LongInv_besem_3_scalar.inp', 'LongInv_besem_4_strict.inp', 'LongInv_besem_5_varcov.inp', 'LongInv_besem_6_latentmean.inp'],
+  data2: { file: 'Ch27-Data2.dat', preset: 'data2-model.json', rows: 10000, cols: 24, aided: ['LongInv_besem_3_strong.inp', 'LongInv_besem_4_strict.inp', 'LongInv_besem_5_varcov.inp', 'LongInv_besem_6_latentmean.inp'],
     names: ['x1_t1', 'x2_t1', 'x3_t1', 'x4_t1', 'y1_t1', 'y2_t1', 'y3_t1', 'y4_t1', 'z1_t1', 'z2_t1', 'z3_t1', 'z4_t1', 'x1_t2', 'x2_t2', 'x3_t2', 'x4_t2', 'y1_t2', 'y2_t2', 'y3_t2', 'y4_t2', 'z1_t2', 'z2_t2', 'z3_t2', 'z4_t2'] },
 };
 for (const [id, S] of Object.entries(SETS)) {

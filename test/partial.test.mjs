@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { buildInp, requestedModels, branchModels, invBranch, branchStart, partialKind, maxLineLength, INV_SEQUENCE, INV_META, labeledExcept } from '../js/syntax-generator.js';
+import { buildInp, requestedModels, branchModels, invBranch, branchStart, partialKind, maxLineLength, INV_SEQUENCE, INV_META, labeledExcept, FILE_STEP } from '../js/syntax-generator.js';
 import { createModelSpec, setItems, setFactorCount, setOrdinal, setPartial, setSkipped, clearBranch, partialCandidates, partialKindOf, sanitizeBranches, validateSpec, SKIPPABLE } from '../js/state.js';
 import { parseOut, splitBranchTag, parseModIndices } from '../js/out-parser.js';
 import { invarianceSeries, invarianceLabel, renderInvarianceTable, invarianceProseText, invarianceGuidelineNote, modIndexFor, freedText, sortInvarianceModels } from '../js/apa-render.js';
@@ -59,7 +59,7 @@ section('multi-group ESEM: the Z2 intercept freed at the strong step (Morin T11)
   ok('var–cov: covariances equated, G2 variances refixed', /F1 WITH F2 \(cov1\);/.test(vc) && /MODEL G2:\nF1-F3@1;/.test(vc));
   ok('latent means: G2 means refixed @0', /MODEL G2:\nF1-F3@1;\nF1 WITH F2 \(cov1\);[\s\S]*\[F1-F3@0\];/.test(lm));
   const models = branchModels(spec, 'groups', 'esem');
-  ok('branch models: strong@p … latent means@p with "p" files', models.map((m) => m.key).join() === 'inv:scalar@p,inv:strict@p,inv:varcov@p,inv:latentmean@p' && models.map((m) => m.file).join() === 'Inv_3p_scalar.inp,Inv_4p_strict.inp,Inv_5p_varcov.inp,Inv_6p_latentmean.inp', models.map((m) => m.file));
+  ok('branch models: strong@p … latent means@p with "p" files', models.map((m) => m.key).join() === 'inv:scalar@p,inv:strict@p,inv:varcov@p,inv:latentmean@p' && models.map((m) => m.file).join() === 'Inv_3p_strong.inp,Inv_4p_strict.inp,Inv_5p_varcov.inp,Inv_6p_latentmean.inp', models.map((m) => m.file));
   ok('branch labels name the freed parameter', /partial \(Z2\)/.test(models[0].label) && /partial branch/.test(models[1].label), models.map((m) => m.label));
   const all = requestedModels(spec);
   ok('the Syntax page lists the branch after the full chain of its model', all.filter((m) => m.variant === 'p').length === 4 && all.findIndex((m) => m.key === 'inv:latentmean') < all.findIndex((m) => m.key === 'inv:scalar@p') && all.filter((m) => m.key.startsWith('binv:')).every((m) => !m.variant), all.map((m) => m.key));
@@ -131,13 +131,13 @@ section('ordinal chain (WLSMV / THETA / DIFFTEST): thresholds freed, the branch\
   const p = buildInp(spec, 'inv:scalar@p');
   ok('partial strong (thresholds): the freed item keeps the configural treatment, the others are fully equated', /\[duy2_t1\$1\] \(t5\); \[duy2_t1\$2\]; \[duy2_t1\$3\]; \[duy2_t1\$4\];/.test(p) && /\[duy3_t1\$1\] \(t9\);\s+\[duy3_t1\$2\] \(t10\);/.test(p), p);
   ok('partial strong: title "Strong (thresholds) [partial strong: duy2_t1]"', /MG invariance \(categorical\) - Strong \(thresholds\) \[partial strong: duy2_t1\]/.test(p));
-  ok('DIFFTEST: reads the full weak step\'s file, saves its own "p" file', /DIFFTEST = Inv_diff_metric.dat;/.test(p.split('MODEL:')[0]) && /SAVEDATA:\nDIFFTEST = Inv_diff_scalarp.dat;/.test(p));
+  ok('DIFFTEST: reads the full weak step\'s file, saves its own "p" file', /DIFFTEST = Inv_diff_weak.dat;/.test(p.split('MODEL:')[0]) && /SAVEDATA:\nDIFFTEST = Inv_diff_strongp.dat;/.test(p));
   const st = buildInp(spec, 'inv:strict@p');
-  ok('strict@p reads the partial strong file and saves strictp', /DIFFTEST = Inv_diff_scalarp.dat;/.test(st.split('MODEL:')[0]) && /DIFFTEST = Inv_diff_strictp.dat;/.test(st.split('SAVEDATA:')[1]));
-  ok('the full strict still reads the full strong file', /DIFFTEST = Inv_diff_scalar.dat;/.test(buildInp(spec, 'inv:strict').split('MODEL:')[0]));
+  ok('strict@p reads the partial strong file and saves strictp', /DIFFTEST = Inv_diff_strongp.dat;/.test(st.split('MODEL:')[0]) && /DIFFTEST = Inv_diff_strictp.dat;/.test(st.split('SAVEDATA:')[1]));
+  ok('the full strict still reads the full strong file', /DIFFTEST = Inv_diff_strong.dat;/.test(buildInp(spec, 'inv:strict').split('MODEL:')[0]));
   setSkipped(spec, 'groups', 'esem', 'strict', true);
   const vc = buildInp(spec, 'inv:varcov@p');
-  ok('strict skipped: var–cov@p reads the partial strong file, keeps G2 uniquenesses free', /DIFFTEST = Inv_diff_scalarp.dat;/.test(vc.split('MODEL:')[0]) && /MODEL okulB:[\s\S]*duy1_t1\*; duy2_t1\*;/.test(vc) && /\[partial strong: duy2_t1; without strict\]/.test(vc), vc);
+  ok('strict skipped: var–cov@p reads the partial strong file, keeps G2 uniquenesses free', /DIFFTEST = Inv_diff_strongp.dat;/.test(vc.split('MODEL:')[0]) && /MODEL okulB:[\s\S]*duy1_t1\*; duy2_t1\*;/.test(vc) && /\[partial strong: duy2_t1; without strict\]/.test(vc), vc);
   const errs = validateSpec({ ...spec, groups: { ...spec.groups, invariance: { ...spec.groups.invariance, partial: { esem: { scalar: ['duy1_t1'], metric: ['F1:duy2_t1'] } } } } }).errors.join(' | ');
   ok('validateSpec: a freed referent and a partial ESEM weak step are errors', /referent/.test(errs) && /no partial form/.test(errs), errs);
 }
@@ -162,7 +162,7 @@ section('longitudinal chains: the pair freed at both waves (Morin T34), CFA load
   const lm = buildInp(spec, 'linv:besem:latentmean@p');
   ok('latent means@p keeps z2 free, refixes the Time-2 means (G2 included)', (lm.match(/\[z2_t[12]\*\];/g) || []).length === 2 && /\[F4-F6@0\];\n\[G2@0\];/.test(lm));
   const bm = branchModels(spec, 'time', 'besem');
-  ok('longitudinal branch files', bm.map((m) => m.file).join() === 'LongInv_besem_3p_scalar.inp,LongInv_besem_4p_strict.inp,LongInv_besem_5p_varcov.inp,LongInv_besem_6p_latentmean.inp', bm.map((m) => m.file));
+  ok('longitudinal branch files', bm.map((m) => m.file).join() === 'LongInv_besem_3p_strong.inp,LongInv_besem_4p_strict.inp,LongInv_besem_5p_varcov.inp,LongInv_besem_6p_latentmean.inp', bm.map((m) => m.file));
   ok('candidates name the pair', partialCandidates(spec, 'time', 'besem', 'scalar').find((c) => c.id === 'z2_t1').label === 'z2_t1 / z2_t2');
   setPartial(spec, 'time', 'cfa', 'metric', ['F3:z2_t1']);
   const w = buildInp(spec, 'linv:cfa:metric@p');
@@ -170,7 +170,7 @@ section('longitudinal chains: the pair freed at both waves (Morin T34), CFA load
   setSkipped(spec, 'time', 'esem', 'varcov', true);
   const e = buildInp(spec, 'linv:esem:latentmean@p');
   ok('ESEM latent means without var–cov across time: Time-2 variances free, no lcov labels, means refixed', !/F4-F6@1;/.test(e) && !/lcov/.test(e) && /\[F4-F6@0\];/.test(e) && /\[without var-cov\]/.test(e), e);
-  ok('full-chain files unchanged by the branch', requestedModels(spec).filter((m) => !m.variant && m.key.startsWith('linv:esem')).map((m) => m.file).join() === INV_SEQUENCE.map((s, i) => `LongInv_esem_${i + 1}_${s}.inp`).join());
+  ok('full-chain files unchanged by the branch', requestedModels(spec).filter((m) => !m.variant && m.key.startsWith('linv:esem')).map((m) => m.file).join() === INV_SEQUENCE.map((s, i) => `LongInv_esem_${i + 1}_${FILE_STEP[s]}.inp`).join());
 }
 
 section('sweep follow-ups (2 Nov): longitudinal ordinal ESEM target blocks, 999 indices, Time-2 factor pairs');

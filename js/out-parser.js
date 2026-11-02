@@ -146,7 +146,7 @@ export function parseOut(text) {
   const lines = String(text).split(/\r\n|\r|\n/);
   const res = {
     title: null, estimator: null, rotation: null, nObs: null, nFreeParams: null,
-    invKind: null, invStep: null, invModel: null, diffTest: null, emptyCategory: null,
+    invKind: null, invStep: null, invModel: null, diffTest: null, modelConstraint: false, emptyCategory: null,
     fit: {}, loadings: {}, factorOrder: [], items: [], factorCorr: [],
     residualVariances: {}, intercepts: {}, factorVariances: {}, rSquare: {},
     uniqueness: {}, omega: {}, primaryFactor: {}, regressions: [],
@@ -155,6 +155,10 @@ export function parseOut(text) {
 
   res.converged = /THE MODEL ESTIMATION TERMINATED NORMALLY/.test(text);
   res.hasError = /(DID NOT TERMINATE NORMALLY|NO CONVERGENCE|PROBLEM OCCURRED|fatal error)/i.test(text);
+  // MODEL CONSTRAINT in the echoed input (the residual-variance aid): Mplus then ignores a MODINDICES request and
+  // refuses DIFFTEST, so the invariance table says why a Δχ² is missing instead of blaming the run folder
+  const echoEnd = text.search(/INPUT READING TERMINATED/);
+  res.modelConstraint = /^\s*MODEL CONSTRAINT:/m.test(echoEnd > 0 ? text.slice(0, echoEnd) : text);
   res.seComputed = !/STANDARD ERRORS OF THE MODEL PARAMETER ESTIMATES COULD NOT BE\s+COMPUTED/i.test(text);
   res.chiSquareComputed = !/CHI-SQUARE COULD NOT BE COMPUTED|CHI-SQUARE STATISTIC IS NEGATIVE/i.test(text);
   if (!res.seComputed) res.warnings.push('Standard errors could not be computed — the model may not be identified.');

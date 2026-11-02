@@ -115,7 +115,7 @@ variances/covariances (var–cov) and latent means — sorted by the modificatio
 set cannot free single loadings, variances or means; Morin, 2023; referent items of a thresholds chain stay equated).
 Pick one parameter at a time, the largest index first. The app then writes the partial model in Morin's form
 (`[X1 … Z1] (i1-i9); [Z2*]; [Z3 Z4] (i11-i12);` in every group or at both waves, T11/T34) and the later steps built
-from it as a **branch** of the chain — `Inv_3p_scalar.inp … Inv_6p_latentmean.inp`, with its own derivative files
+from it as a **branch** of the chain — `Inv_3p_strong.inp … Inv_6p_latentmean.inp`, with its own derivative files
 `Inv_diff_<step>p.dat` for WLSMV — and runs the branch in the same folder (*Run the partial model and the rest of
 the sequence*; or download the inputs). The table then shows the failed model (reported, not retained, †), the
 partial model compared with the last retained step, and the branch's later steps compared along the branch; the

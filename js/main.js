@@ -463,23 +463,23 @@ function renderSyntaxStep() {
   aidBody.push(el('p', { class: 'hint' }, 'Loosens Mplus’s convergence criterion — Morin’s remedy for hard-to-converge invariance models. Report it when used.'));
   aidBody.push(el('p', { class: 'sub-h' }, 'Constrain residual variance > 0'));
   {
-    if (invOn) aidBody.push(el('p', { class: 'hint', style: { marginTop: '0' } }, 'Applied to the total-sample measurement models only — not to the invariance sequences (a MODEL label there equates the parameter across groups/waves). CONVERGENCE above still applies to every generated model.'));
+    if (invOn) aidBody.push(el('p', { class: 'hint', style: { marginTop: '0' } }, 'Applied to the measurement models and to the invariance sequences (the rules are in the note below). CONVERGENCE above still applies to every generated model.'));
     const box = el('div', { class: 'chips' });
     for (const it of spec.items) {
-      // Categorical items are offered disabled: their residual variance is not a free parameter
-      // under the default DELTA parameterization, so the generator skips them (see residualAidLines).
+      // Ordinal items: the constraint applies in the invariance sequences only (THETA — group 2 / Time 2 before the strict
+      // step); the single-group measurement models (DELTA) have no residual-variance parameter (see residualAidLines).
       const isCat = spec.data.categorical?.includes(it);
       const on = () => aids.positiveResiduals.includes(it);
-      const chip = el('button', { type: 'button', class: 'chip chip-sm mono', disabled: isCat, title: isCat ? 'categorical item — residual variance is not a free parameter (DELTA parameterization)' : undefined }, it);
+      const chip = el('button', { type: 'button', class: 'chip chip-sm mono', title: isCat ? 'ordinal item — constrained in the invariance sequences only (group 2 / Time 2 before the strict step)' : undefined }, it);
       const sync = () => chip.setAttribute('aria-pressed', String(on()));
-      if (!isCat) chip.onclick = () => { aids.positiveResiduals = on() ? aids.positiveResiduals.filter((x) => x !== it) : [...aids.positiveResiduals, it]; sync(); draw(); };
+      chip.onclick = () => { aids.positiveResiduals = on() ? aids.positiveResiduals.filter((x) => x !== it) : [...aids.positiveResiduals, it]; sync(); draw(); };
       sync();
       box.append(chip);
     }
     aidBody.push(box);
     aidBody.push(el('p', { class: 'hint' }, [
       'Heywood-case remedy: adds ', el('code', {}, 'item (res#);'), ' with ', el('code', {}, 'MODEL CONSTRAINT: res# > 0;'),
-      '. Applied to the measurement models only. Note: with MODEL CONSTRAINT present, Mplus ignores a MODINDICES request.',
+      '. In the invariance sequences: a label of its own in every group or wave before the strict step, the step’s equality label from the strict step on; for ordinal items (WLSMV) only where the residual variance is free — the non-reference groups or Time 2 before the strict step; Mplus cannot combine DIFFTEST with MODEL CONSTRAINT, so a constrained WLSMV model and the step after it report no Δχ². Note: with MODEL CONSTRAINT present, Mplus ignores a MODINDICES request, so the Partial invariance card cannot sort the parameters of such a model.',
     ]));
   }
   body.push(card(3, 'Convergence aids', 'Optional — they change the generated syntax.', aidBody));

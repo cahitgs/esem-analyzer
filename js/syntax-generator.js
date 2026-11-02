@@ -141,10 +141,8 @@ function fmtConvergence(v) {
 
 // Heywood-case remedy (Morin, Hoyle ch. 27 footnote 5): label each selected item's residual
 // variance in MODEL ("X2 (res1);") and force it positive via MODEL CONSTRAINT ("res1 > 0;").
-// Exact pattern verified in real Mplus 8.3 (test/fixtures/besem_target_data1.out). Single-group
-// measurement builders ONLY: in multi-group models a MODEL label equates the parameter across
-// groups, and the strict steps already carry u#/i# equality labels — a second label on the same
-// residual would collide — so buildInvariance/buildLongInvariance* never emit these.
+// Exact pattern verified in real Mplus 8.3 (test/fixtures/besem_target_data1.out). The single-group
+// measurement builders use these; the invariance chains use chainResidualAid below (Morin's rules).
 function residualAidLines(spec) {
   const sel = new Set(spec.aids?.positiveResiduals || []);
   // Categorical outcomes are excluded: under the default DELTA parameterization their residual
@@ -155,6 +153,35 @@ function residualAidLines(spec) {
   return {
     labels: items.map((it, i) => `${it} (res${i + 1});`),
     constraint: items.length ? ['MODEL CONSTRAINT:', ...items.map((_, i) => `res${i + 1} > 0;`)] : [],
+  };
+}
+
+// The same remedy in the invariance chains (Morin, 2 Nov 2026): before the strict step the residual variance of a selected
+// item gets a label of its own in every group or wave ("Z2 (r2g1);" in group 1, "Z2 (r2g2);" in group 2; r2t1 / r2t2 across
+// time) and every label is constrained; from the strict step on the item carries the step's equality label (u#), which is
+// constrained once; under WLSMV/THETA a residual variance can only be constrained where it is a free parameter — the
+// non-reference groups or Time 2 before the strict step (group 1 / Time 1, and every group from the strict step on, are
+// fixed at 1). `items` are the names the statements use (Time-1 names; the Time-2 names are passed to label()/theta()).
+function chainResidualAid(spec, items) {
+  const sel = new Set((spec.aids?.positiveResiduals || []).map((it) => items.indexOf(it)).filter((i) => i >= 0));
+  const lab = (i, tag) => `r${i + 1}${tag}`;
+  const posOf = (name, names) => { const i = names.indexOf(name); return i >= 0 && sel.has(i) ? i : -1; };
+  return {
+    sel, lab,
+    // before strict (MLR): the free residuals as one statement, the selected items on lines of their own with a label
+    freeLines: (tag, names = items) => {
+      const rest = names.filter((_, i) => !sel.has(i));
+      return [...(rest.length ? [stmt(rest)] : []), ...[...sel].sort((a, b) => a - b).map((i) => `${names[i]} (${lab(i, tag)});`)];
+    },
+    // from strict on (MLR): the labelled runs stay; a selected item a partial strict step freed ("X2;") gets its own label
+    label: (text, tag, names = items) => text.split('\n').map((ln) => { const m = ln.match(/^(\S+);$/); const i = m ? posOf(m[1], names) : -1; return i >= 0 ? `${names[i]} (${lab(i, tag)});` : ln; }).join('\n'),
+    // THETA chains: a free residual ("X2*;") of a selected item gets its label; fixed ones (@1) cannot be constrained
+    theta: (parts, tag, names = items) => parts.map((ln) => { const m = ln.match(/^(\S+)\*;$/); const i = m ? posOf(m[1], names) : -1; return i >= 0 ? `${names[i]}* (${lab(i, tag)});` : ln; }),
+    // MODEL CONSTRAINT for the labels in use: labelsFor(i) names them for item i (empty = nothing to constrain)
+    constraint: (labelsFor) => {
+      const labels = [...sel].sort((a, b) => a - b).flatMap((i) => labelsFor(i));
+      return labels.length ? ['MODEL CONSTRAINT:', ...labels.map((l) => `${l} > 0;`)] : [];
+    },
   };
 }
 
@@ -323,8 +350,8 @@ export function stepLabel(step, { thresholds = false } = {}) { return (threshold
 //   partial: { [modelType]: { [step]: [ids] } }     skipped: { [modelType]: [steps] }
 // where an id names an item (its intercept, thresholds or residual variance), 'F1:X3' a loading (CFA families),
 // 'F1~F2' a factor covariance, 'F2' a factor variance (var–cov step) or a factor mean (latent-means step).
-// Branch models carry the variant 'p' (key "inv:scalar@p", file "Inv_3p_scalar.inp", DIFFTEST file
-// "Inv_diff_scalarp.dat"); the full chain ignores the branch.
+// Branch models carry the variant 'p' (key "inv:scalar@p", file "Inv_3p_strong.inp", DIFFTEST file
+// "Inv_diff_strongp.dat"); the full chain ignores the branch.
 export const PARTIAL_KIND = { metric: 'loadings', scalar: 'intercepts', strict: 'residuals', varcov: 'varcov', latentmean: 'means' };
 export const SKIPPABLE_STEPS = ['strict', 'varcov'];
 /** What a step may free for a model family: CFA and bifactor-CFA at every step after configural; ESEM and
@@ -396,7 +423,9 @@ function labeledExcept(items, prefix, bracket, freeIdx = new Set()) {
 }
 const positionsOf = (items, ids) => new Set([...ids].map((id) => items.indexOf(id)).filter((i) => i >= 0));
 
-function diffTestName(step, prefix = 'Inv', suffix = '') { return `${prefix}_diff_${step}${suffix}.dat`; }
+/** The step words of the FILE names (the keys stay metric / scalar inside the app): Morin's weak / strong. */
+export const FILE_STEP = { configural: 'configural', metric: 'weak', scalar: 'strong', strict: 'strict', varcov: 'varcov', latentmean: 'latentmean' };
+function diffTestName(step, prefix = 'Inv', suffix = '') { return `${prefix}_diff_${FILE_STEP[step] || step}${suffix}.dat`; }
 /** DIFFTEST handshake between the ADJACENT selected steps of a WLSMV chain: a model reads the derivatives of the
  *  previous retained step (skipped steps are passed over; a branch model reads the full chain's file until the
  *  branch starts, then the branch's own "…p.dat" files) and saves its own for the next one. */
@@ -411,7 +440,19 @@ function diffTestLinks(spec, mode, mt, step, variant, seq, prefix) {
   for (let i = pos - 1; i >= 0; i--) if (!br.skipped.includes(seq[i])) { prev = seq[i]; break; }
   for (let i = pos + 1; i < seq.length; i++) if (!br.skipped.includes(seq[i])) { next = seq[i]; break; }
   const suffix = (s) => (variant === 'p' && stepIdx(s) >= start ? 'p' : '');
-  return { difftestIn: prev ? diffTestName(prev, prefix, suffix(prev)) : null, difftestOut: next ? diffTestName(step, prefix, suffix(step)) : null };
+  // Mplus cannot combine DIFFTEST with MODEL CONSTRAINT ("DIFFTEST is not available in conjunction with MODEL CONSTRAINT"):
+  // a model that carries the residual-variance constraint saves no derivatives, and the step after it reads none
+  const constrained = (s) => residualAidActive(spec, mode, mt, s, variant);
+  return { difftestIn: prev && !constrained(prev) ? diffTestName(prev, prefix, suffix(prev)) : null, difftestOut: next && !constrained(step) ? diffTestName(step, prefix, suffix(step)) : null };
+}
+/** Does the residual-variance aid write a MODEL CONSTRAINT into this WLSMV chain model? Only where a selected item's
+ *  residual variance is a free parameter: before the strict step, or freed by a partial strict step (Morin's WLSMV rule). */
+function residualAidActive(spec, mode, mt, step, variant) {
+  const items = mode === 'time' ? (spec.longitudinal?.waves?.[0] || []) : spec.items;
+  const sel = (spec.aids?.positiveResiduals || []).filter((it) => items.includes(it));
+  if (!sel.length) return false;
+  const plan = mode === 'time' ? longPlan(spec, mt, step, variant) : stepPlan(spec, 'groups', mt, step, variant);
+  return !plan.residuals || sel.some((it) => plan.free.residuals.has(it));
 }
 
 // ---------- Multi-group measurement invariance (CFA, ESEM, bifactor-CFA, bifactor-ESEM) ----------
@@ -479,21 +520,25 @@ function buildMgContinuous(spec, mt, step, variant) {
   const { items } = P;
   const intFree = stmt([`[${items[0]}`, ...items.slice(1, -1), `${items[items.length - 1]}]`]);
   const intInv = labeledExcept(items, 'i', true, positionsOf(items, plan.free.intercepts));
-  const uniqFree = stmt(items);
-  const uniqInv = labeledExcept(items, 'u', false, positionsOf(items, plan.free.residuals));
+  const freeRes = positionsOf(items, plan.free.residuals);
+  const aid = chainResidualAid(spec, items);
+  // residual variances: free before the strict step, equated (u#) from it on; the selected items of the residual aid labelled
+  const uniqLines = (tag) => (plan.residuals ? [aid.label(labeledExcept(items, 'u', false, freeRes), tag)] : aid.sel.size ? aid.freeLines(tag) : [stmt(items)]);
   const cov = plan.varcov ? P.covLabels(plan.free.varcov) : [];
-  const main = [...P.by, P.varFix, ...cov, P.meanFix, plan.intercepts ? intInv : intFree, plan.residuals ? uniqInv : uniqFree];
-  const grp = [
+  const main = [...P.by, P.varFix, ...cov, P.meanFix, plan.intercepts ? intInv : intFree, ...uniqLines('g1')];
+  const grp = (tag) => [
     ...(plan.configural ? P.by : P.freeLoadingLines(plan.free.loadings)),
     plan.configural || plan.varcov ? P.varFixExcept(plan.free.varcov) : P.varFree,
     ...cov,
     plan.intercepts && !plan.means ? P.meanFree : P.meanFixExcept(plan.means ? plan.free.means : new Set()),
     plan.intercepts ? intInv : intFree,
-    plan.residuals ? uniqInv : uniqFree,
+    ...uniqLines(tag),
   ];
   const C = MG_CHAIN[mt];
   const lines = [...titleLine(`${C.title(false)} - ${stepLabel(step)}${branchTag(plan)}`), ...headerBlocks(spec, { ...C.header, grouping: true }), 'MODEL:', ...main];
-  for (const code of spec.groups.codes.slice(1)) lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp);
+  spec.groups.codes.slice(1).forEach((code, gi) => lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp(`g${gi + 2}`)));
+  const groupTags = spec.groups.codes.map((_, gi) => `g${gi + 1}`);
+  lines.push(...aid.constraint((i) => (plan.residuals && !freeRes.has(i) ? [`u${i + 1}`] : groupTags.map((t) => aid.lab(i, t)))));
   lines.push(...outputBlock(spec));
   return lines.join('\n') + '\n';
 }
@@ -538,15 +583,19 @@ function buildMgCategorical(spec, mt, step, variant) {
   const thr = plan.intercepts ? thresholdLines(spec, 'all', counts, refs, items, plan.free.intercepts) : thresholdLines(spec, 'partial', counts, refs);
   const uniqFix = wrapList(items.map((it) => `${it}@1;`));
   const uniqFree = wrapList(items.map((it) => `${it}*;`));
-  const uniqGrp = !plan.residuals ? uniqFree : plan.free.residuals.size ? wrapList(items.map((it) => (plan.free.residuals.has(it) ? `${it}*;` : `${it}@1;`))) : uniqFix;
+  const aid = chainResidualAid(spec, items);
+  const resFree = (it) => !plan.residuals || plan.free.residuals.has(it);
+  // THETA: residuals fixed at 1 in group 1, free in the other groups until the strict step refixes them; a selected item's
+  // free residual carries its label (group 2 / Time 2 only — Morin's WLSMV rule)
+  const uniqGrp = (tag) => (!plan.residuals && !aid.sel.size ? uniqFree : wrapList(aid.theta(items.map((it) => (resFree(it) ? `${it}*;` : `${it}@1;`)), tag)));
   const cov = plan.varcov ? P.covLabels(plan.free.varcov) : [];
   const main = [...P.by, P.varFix, ...cov, P.meanFix, thr, uniqFix];
-  const grp = [
+  const grp = (tag) => [
     ...(plan.configural ? P.by : P.freeLoadingLines(plan.free.loadings)),
     plan.configural || plan.varcov ? P.varFixExcept(plan.free.varcov) : P.varFree,
     ...cov,
     plan.means ? P.meanFixExcept(plan.free.means) : P.meanFree,
-    thr, uniqGrp,
+    thr, uniqGrp(tag),
   ];
   const C = MG_CHAIN[mt];
   const header = { ...C.header, parameterization: 'THETA', grouping: true };
@@ -554,7 +603,9 @@ function buildMgCategorical(spec, mt, step, variant) {
   const seq = spec.groups.invariance?.sequence || INV_SEQUENCE;
   const { difftestIn, difftestOut } = diffTestLinks(spec, 'groups', mt, step, variant, seq, C.filePrefix);
   const lines = [...titleLine(`${C.title(true)} - ${stepLabel(step, { thresholds: true })}${branchTag(plan)}`), ...headerBlocks(spec, { ...header, difftestIn }), 'MODEL:', ...main];
-  for (const code of spec.groups.codes.slice(1)) lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp);
+  spec.groups.codes.slice(1).forEach((code, gi) => lines.push(`MODEL ${groupLabels(spec).get(String(code.code))}:`, ...grp(`g${gi + 2}`)));
+  const otherTags = spec.groups.codes.slice(1).map((_, gi) => `g${gi + 2}`);
+  lines.push(...aid.constraint((i) => (resFree(items[i]) ? otherTags.map((t) => aid.lab(i, t)) : [])));
   lines.push(...outputBlock(spec));
   if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
   return lines.join('\n') + '\n';
@@ -706,7 +757,12 @@ function buildLongContinuous(spec, mt, step, variant) {
       lines.push(...orthogonalityLines(w1), ...orthogonalityLines(w2));     // bifactor: orthogonal within each wave
     }
   }
-  if (f.residuals) lines.push(...longResidualLines(t1, t2, positionsOf(t1, f.free.residuals)));
+  const freeRes = positionsOf(t1, f.free.residuals);
+  const aid = chainResidualAid(spec, t1);
+  if (f.residuals) {
+    const [r1, r2] = longResidualLines(t1, t2, freeRes);
+    lines.push(aid.label(r1, 't1', t1), aid.label(r2, 't2', t2));
+  } else if (aid.sel.size) lines.push(...[...aid.sel].sort((a, b) => a - b).flatMap((i) => [`${t1[i]} (${aid.lab(i, 't1')});`, `${t2[i]} (${aid.lab(i, 't2')});`]));
   if (f.varcov) {
     if (mt === 'esem') lines.push(...t2VarLines(k, f.free.varcov), ...longCovLabels(k, f.free.varcov)); // T1 vars @1 by ESEM default
     else if (mt === 'besem') {
@@ -719,6 +775,7 @@ function buildLongContinuous(spec, mt, step, variant) {
   }
   if (f.intercepts) lines.push(...longInterceptMeanLines(t1, t2, k, f, positionsOf(t1, f.free.intercepts), gid));
   if (spec.longitudinal.correlatedUniqueness) lines.push(...pwithLines(t1, t2));
+  lines.push(...aid.constraint((i) => (f.residuals && !freeRes.has(i) ? [`u${i + 1}`] : [aid.lab(i, 't1'), aid.lab(i, 't2')])));
   lines.push(...outputBlock(spec));
   return lines.join('\n') + '\n';
 }
@@ -801,12 +858,14 @@ function buildLongCategorical(spec, mt, step, variant) {
   }
   // thresholds (equality across waves by shared labels), THETA uniquenesses, latent means
   lines.push(thrLines(t1), thrLines(t2));
+  const aid = chainResidualAid(spec, t1);
   lines.push(wrapList(t1.map((it) => `${it}@1;`)));
-  lines.push(wrapList(t2.map((it, p) => (f.residuals && !freeRes.has(p) ? `${it}@1;` : `${it}*;`))));
+  lines.push(wrapList(aid.theta(t2.map((it, p) => (f.residuals && !freeRes.has(p) ? `${it}@1;` : `${it}*;`)), 't2', t2)));
   lines.push(`[${t1r}@0];`);
   if (bifactor) lines.push('[G1@0];');
   lines.push(...(f.meanFix ? t2MeanLines(k, f.free.means, gid) : [`[${t2r}];`, ...(bifactor ? ['[G2];'] : [])]));
   if (spec.longitudinal.correlatedUniqueness) lines.push(...pwithLines(t1, t2));
+  lines.push(...aid.constraint((i) => (!f.residuals || freeRes.has(i) ? [aid.lab(i, 't2')] : [])));
   lines.push(...outputBlock(spec));
   if (difftestOut) lines.push('SAVEDATA:', `DIFFTEST = ${difftestOut};`);
   return lines.join('\n') + '\n';
@@ -854,7 +913,7 @@ function chainModels(spec, mode, mt, variant, tag) {
     if (br && (stepIdx(step) < start || br.skipped.includes(step))) return;
     const p = br ? 'p' : '';
     const key = mode === 'time' ? `linv:${mt}:${step}${p ? '@p' : ''}` : `${MG_CHAIN[mt].prefix}:${step}${p ? '@p' : ''}`;
-    const file = mode === 'time' ? `LongInv_${mt}_${i + 1}${p}_${step}.inp` : `${MG_CHAIN[mt].filePrefix}_${i + 1}${p}_${step}.inp`;
+    const file = mode === 'time' ? `LongInv_${mt}_${i + 1}${p}_${FILE_STEP[step]}.inp` : `${MG_CHAIN[mt].filePrefix}_${i + 1}${p}_${FILE_STEP[step]}.inp`;
     const partialHere = br?.partial[step]?.length ? ` · partial (${br.partial[step].join(', ')})` : (br ? ' · partial branch' : '');
     out.push({ key, step, modelType: mt, variant: p, label: `${tag}${stepLabel(step, { thresholds })}${partialHere}`, file });
   });
